@@ -25,6 +25,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+//测试
 public class SocialServiceImpl implements SocialService {
     private final UserMapper userMapper;
     private final FriendshipMapper friendshipMapper;
