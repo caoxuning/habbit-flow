@@ -35,11 +35,11 @@ export const badgeApi = {
 export const socialApi = {
   searchUsers: (keyword) => http.get('/social/users/search', { params: { keyword } }),
   friends: () => http.get('/social/friends'),
-  friendRequests: () => http.get('/social/friend-requests'),
+  friendRequests: (type = 'received') => http.get('/social/friend-requests', { params: { type } }),
   requestFriend: (data) => http.post('/social/friend-requests', data),
   acceptFriend: (id) => http.put(`/social/friend-requests/${id}/accept`),
   rejectFriend: (id) => http.put(`/social/friend-requests/${id}/reject`),
-  circles: () => http.get('/social/circles'),
+  circles: (params) => http.get('/social/circles', { params }),
   createCircle: (data) => http.post('/social/circles', data),
   joinCircle: (id) => http.post(`/social/circles/${id}/join`),
   leaveCircle: (id) => http.delete(`/social/circles/${id}/leave`),

@@ -60,3 +60,47 @@ class UserBadge(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
     badge_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("badge.id"), nullable=False)
     obtained_time: Mapped[object] = mapped_column(DateTime, nullable=False)
+
+
+class Friendship(Base):
+    __tablename__ = "friendship"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    requester_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
+    addressee_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="PENDING")
+    message: Mapped[str | None] = mapped_column(String(255))
+    create_time: Mapped[object] = mapped_column(DateTime, nullable=False)
+    update_time: Mapped[object] = mapped_column(DateTime, nullable=False)
+
+
+class SocialCircle(Base):
+    __tablename__ = "social_circle"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
+    description: Mapped[str] = mapped_column(String(255), nullable=False)
+    icon: Mapped[str] = mapped_column(String(20), nullable=False, default="TAG")
+    owner_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"))
+    member_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    create_time: Mapped[object] = mapped_column(DateTime, nullable=False)
+
+
+class CircleMember(Base):
+    __tablename__ = "circle_member"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    circle_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("social_circle.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
+    role: Mapped[str] = mapped_column(String(20), nullable=False, default="MEMBER")
+    join_time: Mapped[object] = mapped_column(DateTime, nullable=False)
+
+
+class CirclePost(Base):
+    __tablename__ = "circle_post"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    circle_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("social_circle.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
+    content: Mapped[str] = mapped_column(String(1000), nullable=False)
+    create_time: Mapped[object] = mapped_column(DateTime, nullable=False)

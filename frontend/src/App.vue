@@ -53,6 +53,10 @@
           <el-icon><Medal /></el-icon>
           <span>勋章奖励</span>
         </el-menu-item>
+        <el-menu-item index="social">
+          <el-icon><Bell /></el-icon>
+          <span>社交圈子</span>
+        </el-menu-item>
         <el-menu-item index="profile">
           <el-icon><User /></el-icon>
           <span>个人信息</span>
@@ -206,6 +210,160 @@
         <el-empty v-if="badges.length === 0" description="完成首次打卡即可获得第一枚勋章" />
       </div>
 
+      <div v-if="activeView === 'social'" class="social-space">
+        <el-tabs v-model="socialTab">
+          <el-tab-pane label="好友管理" name="friends" />
+          <el-tab-pane label="圈子广场" name="circles" />
+          <el-tab-pane label="社区动态" name="feed" />
+        </el-tabs>
+
+        <div v-if="socialTab === 'friends'" class="two-column">
+          <section class="panel">
+            <div class="panel-head">
+              <h3>用户搜索</h3>
+              <el-icon><User /></el-icon>
+            </div>
+            <div class="inline-form">
+              <el-input v-model="userKeyword" placeholder="输入用户名关键词" clearable @keyup.enter="searchUsers" />
+              <el-button type="primary" :icon="Refresh" @click="searchUsers">搜索</el-button>
+            </div>
+            <el-table :data="socialUsers" height="280" stripe>
+              <el-table-column prop="username" label="用户名" min-width="130" />
+              <el-table-column prop="email" label="邮箱" min-width="160" />
+              <el-table-column label="状态" width="100">
+                <template #default="{ row }">
+                  <el-tag>{{ friendshipLabel(row.friendshipStatus) }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="110">
+                <template #default="{ row }">
+                  <el-button size="small" type="primary" :disabled="row.friendshipStatus !== 'NONE' && row.friendshipStatus !== 'REJECTED'" @click="requestFriend(row)">
+                    申请
+                  </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h3>好友申请</h3>
+              <el-icon><Bell /></el-icon>
+            </div>
+            <el-table :data="friendRequests" height="280" stripe>
+              <el-table-column label="申请人" min-width="120">
+                <template #default="{ row }">{{ row.requester.username }}</template>
+              </el-table-column>
+              <el-table-column prop="message" label="留言" min-width="160" />
+              <el-table-column label="状态" width="90">
+                <template #default="{ row }">
+                  <el-tag>{{ friendshipLabel(row.status) }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="150">
+                <template #default="{ row }">
+                  <el-button size="small" type="success" :disabled="row.status !== 'PENDING'" @click="handleFriendRequest(row.id, true)">同意</el-button>
+                  <el-button size="small" :disabled="row.status !== 'PENDING'" @click="handleFriendRequest(row.id, false)">拒绝</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </section>
+
+          <section class="panel social-wide">
+            <div class="panel-head">
+              <h3>好友列表</h3>
+              <el-icon><User /></el-icon>
+            </div>
+            <div class="friend-list">
+              <article v-for="friend in friends" :key="friend.id" class="mini-card">
+                <strong>{{ friend.username }}</strong>
+                <span>{{ friend.email || '未填写邮箱' }}</span>
+              </article>
+              <el-empty v-if="friends.length === 0" description="搜索用户并发送好友申请" />
+            </div>
+          </section>
+        </div>
+
+        <div v-if="socialTab === 'circles'" class="two-column">
+          <section class="panel">
+            <div class="panel-head">
+              <h3>圈子列表</h3>
+              <el-icon><Medal /></el-icon>
+            </div>
+            <div class="circle-list">
+              <article v-for="circle in circles" :key="circle.id" class="mini-card selectable" :class="{ active: selectedCircleId === circle.id }" @click="selectCircle(circle)">
+                <div>
+                  <strong>{{ circle.name }}</strong>
+                  <span>{{ circle.description }}</span>
+                </div>
+                <small>{{ circle.memberCount }} 人</small>
+                <el-button size="small" :type="circle.joined ? 'warning' : 'primary'" @click.stop="toggleCircle(circle)">
+                  {{ circle.joined ? '退出' : '加入' }}
+                </el-button>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h3>创建圈子</h3>
+              <el-icon><Plus /></el-icon>
+            </div>
+            <el-form :model="circleForm" label-position="top">
+              <el-form-item label="圈子名称">
+                <el-input v-model="circleForm.name" placeholder="英语打卡圈" />
+              </el-form-item>
+              <el-form-item label="圈子简介">
+                <el-input v-model="circleForm.description" type="textarea" :rows="3" />
+              </el-form-item>
+              <el-form-item label="图标标识">
+                <el-input v-model="circleForm.icon" placeholder="READ" />
+              </el-form-item>
+              <el-button type="primary" :icon="Plus" @click="createCircle">创建圈子</el-button>
+            </el-form>
+
+            <el-divider />
+
+            <div class="panel-head compact">
+              <h3>圈内发帖</h3>
+              <el-icon><Edit /></el-icon>
+            </div>
+            <el-input v-model="postForm.content" type="textarea" :rows="3" placeholder="分享今天的打卡进展" />
+            <el-button class="post-button" type="primary" :icon="Edit" :disabled="!selectedCircleId" @click="publishPost">发布</el-button>
+          </section>
+
+          <section class="panel social-wide">
+            <div class="panel-head">
+              <h3>圈子帖子</h3>
+              <el-icon><Calendar /></el-icon>
+            </div>
+            <div class="post-list">
+              <article v-for="post in circlePosts" :key="post.id" class="post-item">
+                <strong>{{ post.author.username }} · {{ post.circleName }}</strong>
+                <p>{{ post.content }}</p>
+                <small>{{ post.createTime }}</small>
+              </article>
+              <el-empty v-if="circlePosts.length === 0" description="选择一个圈子查看或发布动态" />
+            </div>
+          </section>
+        </div>
+
+        <section v-if="socialTab === 'feed'" class="panel">
+          <div class="panel-head">
+            <h3>我的圈子动态</h3>
+            <el-icon><Calendar /></el-icon>
+          </div>
+          <div class="post-list">
+            <article v-for="post in feedPosts" :key="post.id" class="post-item">
+              <strong>{{ post.author.username }} · {{ post.circleName }}</strong>
+              <p>{{ post.content }}</p>
+              <small>{{ post.createTime }}</small>
+            </article>
+            <el-empty v-if="feedPosts.length === 0" description="加入圈子后即可查看动态流" />
+          </div>
+        </section>
+      </div>
+
       <div v-if="activeView === 'profile'" class="two-column narrow">
         <section class="panel">
           <div class="panel-head">
@@ -285,7 +443,7 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
 import { Aim, Bell, Calendar, Check, DataAnalysis, Edit, Lock, Medal, Plus, Refresh, SwitchButton, User } from '@element-plus/icons-vue'
-import { authApi, badgeApi, checkInApi, goalApi, statsApi, userApi } from './api'
+import { authApi, badgeApi, checkInApi, goalApi, socialApi, statsApi, userApi } from './api'
 
 const token = ref(localStorage.getItem('habitflow_token'))
 const profile = ref(JSON.parse(localStorage.getItem('habitflow_profile') || 'null'))
@@ -297,6 +455,12 @@ const dashboard = ref(null)
 const goalRows = ref([])
 const checkIns = ref([])
 const badges = ref([])
+const socialUsers = ref([])
+const friends = ref([])
+const friendRequests = ref([])
+const circles = ref([])
+const circlePosts = ref([])
+const feedPosts = ref([])
 const monthlyChartRef = ref()
 const rateChartRef = ref()
 let monthlyChart
@@ -308,6 +472,11 @@ const checkForm = reactive({ goalId: null, remark: '' })
 const makeupForm = reactive({ goalId: null, checkDate: '', remark: '' })
 const profileForm = reactive({ username: '', email: '' })
 const passwordForm = reactive({ oldPassword: '', newPassword: '' })
+const userKeyword = ref('')
+const socialTab = ref('friends')
+const selectedCircleId = ref(null)
+const circleForm = reactive({ name: '', description: '', icon: '' })
+const postForm = reactive({ content: '' })
 const statusOptions = [
   { label: '进行中', value: 'ACTIVE' },
   { label: '已暂停', value: 'PAUSED' },
@@ -319,6 +488,7 @@ const viewTitle = computed(() => ({
   goals: '目标管理',
   checkins: '打卡管理',
   badges: '勋章奖励',
+  social: '社交圈子',
   profile: '个人中心'
 }[activeView.value]))
 
@@ -327,6 +497,7 @@ const viewSubtitle = computed(() => ({
   goals: '创建目标、设置周期、维护每日目标次数。',
   checkins: '提交每日打卡，处理历史补卡并查看记录。',
   badges: '系统根据坚持情况自动发放奖励。',
+  social: '搜索好友、加入圈子、发布动态并查看同伴进展。',
   profile: '维护账号资料并定期更新密码。'
 }[activeView.value]))
 
@@ -347,6 +518,9 @@ onMounted(() => {
 watch(activeView, () => {
   if (activeView.value === 'dashboard') {
     nextTick(renderCharts)
+  }
+  if (activeView.value === 'social') {
+    loadSocialData()
   }
 })
 
@@ -384,8 +558,29 @@ async function loadAll() {
   goalRows.value = goalsData
   checkIns.value = checksData
   badges.value = badgeData
+  await loadSocialData()
   await nextTick()
   renderCharts()
+}
+
+async function loadSocialData() {
+  if (!token.value) return
+  const [friendsData, requestsData, circlesData, feedData] = await Promise.all([
+    socialApi.friends(),
+    socialApi.friendRequests(),
+    socialApi.circles(),
+    socialApi.feed()
+  ])
+  friends.value = friendsData
+  friendRequests.value = requestsData
+  circles.value = circlesData
+  feedPosts.value = normalizeList(feedData)
+  if (!selectedCircleId.value && circles.value.length > 0) {
+    selectedCircleId.value = circles.value[0].id
+  }
+  if (selectedCircleId.value) {
+    await loadCirclePosts(selectedCircleId.value)
+  }
 }
 
 function renderCharts() {
@@ -462,6 +657,68 @@ async function changePassword() {
   ElMessage.success('密码已更新')
 }
 
+async function searchUsers() {
+  if (!userKeyword.value.trim()) {
+    socialUsers.value = []
+    return
+  }
+  socialUsers.value = await socialApi.searchUsers(userKeyword.value.trim())
+}
+
+async function requestFriend(user) {
+  await socialApi.requestFriend({ targetUserId: user.id, message: '一起坚持打卡吧' })
+  ElMessage.success('好友申请已发送')
+  await searchUsers()
+  await loadSocialData()
+}
+
+async function handleFriendRequest(id, accepted) {
+  if (accepted) {
+    await socialApi.acceptFriend(id)
+    ElMessage.success('已同意好友申请')
+  } else {
+    await socialApi.rejectFriend(id)
+    ElMessage.success('已拒绝好友申请')
+  }
+  await loadSocialData()
+}
+
+async function createCircle() {
+  await socialApi.createCircle({ ...circleForm })
+  Object.assign(circleForm, { name: '', description: '', icon: '' })
+  ElMessage.success('圈子已创建')
+  await loadSocialData()
+}
+
+async function toggleCircle(circle) {
+  if (circle.joined) {
+    await socialApi.leaveCircle(circle.id)
+    ElMessage.success('已退出圈子')
+  } else {
+    await socialApi.joinCircle(circle.id)
+    ElMessage.success('已加入圈子')
+  }
+  await loadSocialData()
+}
+
+async function selectCircle(circle) {
+  selectedCircleId.value = circle.id
+  await loadCirclePosts(circle.id)
+}
+
+async function loadCirclePosts(circleId) {
+  circlePosts.value = normalizeList(await socialApi.posts(circleId))
+}
+
+async function publishPost() {
+  if (!selectedCircleId.value) return
+  await socialApi.publishPost(selectedCircleId.value, { ...postForm })
+  Object.assign(postForm, { content: '' })
+  ElMessage.success('动态已发布')
+  await loadCirclePosts(selectedCircleId.value)
+  feedPosts.value = normalizeList(await socialApi.feed())
+}
+
 function logout() {
   localStorage.removeItem('habitflow_token')
   localStorage.removeItem('habitflow_profile')
@@ -479,6 +736,14 @@ function cycleLabel(cycle) {
 
 function statusLabel(status) {
   return { ACTIVE: '进行中', PAUSED: '已暂停', DONE: '已完成' }[status] || status
+}
+
+function friendshipLabel(status) {
+  return { NONE: '未添加', PENDING: '待处理', ACCEPTED: '已通过', REJECTED: '已拒绝' }[status] || status
+}
+
+function normalizeList(data) {
+  return Array.isArray(data) ? data : (data?.list || [])
 }
 
 function emptyGoal() {
