@@ -35,6 +35,21 @@ class CheckInRequest(BaseModel):
     remark: str | None = None
 
 
+class FriendRequest(BaseModel):
+    targetUserId: int
+    message: str | None = None
+
+
+class CircleRequest(BaseModel):
+    name: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    icon: str | None = None
+
+
+class CirclePostRequest(BaseModel):
+    content: str = Field(min_length=1)
+
+
 def user_profile(user):
     return {
         "id": user.id,
@@ -84,3 +99,74 @@ def badge_dict(badge, obtained_time: datetime | None = None):
     if obtained_time is not None:
         data["obtainedTime"] = obtained_time
     return data
+
+
+def user_summary(user, friendship_status: str | None = None):
+    data = {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+    }
+    if friendship_status is not None:
+        data["friendshipStatus"] = friendship_status
+    return data
+
+
+def friendship_dict(friendship, requester, receiver):
+    return {
+        "id": friendship.id,
+        "requester": user_summary(requester),
+        "receiver": user_summary(receiver),
+        "message": friendship.message,
+        "status": friendship.status,
+        "createTime": friendship.create_time,
+        "updateTime": friendship.update_time,
+    }
+
+
+def friend_view(user, friendship):
+    return {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "friendshipId": friendship.id,
+        "friendSince": friendship.update_time,
+    }
+
+
+def circle_dict(circle, owner=None, joined: bool = False):
+    return {
+        "id": circle.id,
+        "name": circle.name,
+        "description": circle.description,
+        "icon": circle.icon,
+        "ownerId": circle.owner_user_id,
+        "ownerName": owner.username if owner is not None else None,
+        "memberCount": circle.member_count,
+        "joined": joined,
+        "createTime": circle.create_time,
+    }
+
+
+def circle_member_dict(member, user):
+    return {
+        "userId": user.id,
+        "username": user.username,
+        "email": user.email,
+        "role": member.role,
+        "joinTime": member.join_time,
+    }
+
+
+def circle_post_dict(post, circle, author):
+    return {
+        "id": post.id,
+        "circleId": circle.id,
+        "circleName": circle.name,
+        "author": user_summary(author),
+        "content": post.content,
+        "likeCount": 0,
+        "commentCount": 0,
+        "liked": False,
+        "createTime": post.create_time,
+    }

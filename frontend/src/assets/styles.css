@@ -240,6 +240,82 @@ h1 {
   color: #7b8794;
 }
 
+.social-space .el-tabs {
+  margin-bottom: 12px;
+}
+
+.inline-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.social-wide {
+  grid-column: 1 / -1;
+}
+
+.friend-list,
+.circle-list,
+.post-list {
+  display: grid;
+  gap: 10px;
+}
+
+.friend-list {
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+}
+
+.mini-card,
+.post-item {
+  border: 1px solid #d9e2ec;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.mini-card {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+
+.mini-card span,
+.mini-card small,
+.post-item small {
+  color: #667482;
+}
+
+.mini-card.selectable {
+  cursor: pointer;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+}
+
+.mini-card.selectable.active {
+  border-color: #2f80ed;
+  box-shadow: 0 0 0 2px rgba(47, 128, 237, 0.12);
+}
+
+.mini-card.selectable span {
+  display: block;
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+.post-button {
+  margin-top: 10px;
+}
+
+.post-item {
+  padding: 14px;
+}
+
+.post-item p {
+  margin: 8px 0;
+  color: #344054;
+  line-height: 1.7;
+}
+
 @media (max-width: 980px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -273,6 +349,11 @@ h1 {
   }
 
   .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .inline-form,
+  .mini-card.selectable {
     grid-template-columns: 1fr;
   }
 }
