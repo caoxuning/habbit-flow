@@ -3,10 +3,10 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from .business import seed_badges
+from .business import seed_badges, seed_circles
 from .common import install_exception_handlers
 from .database import Base, SessionLocal, engine
-from .routers import auth, badges, checkins, exports, goals, stats, users
+from .routers import auth, badges, checkins, exports, goals, social, stats, users
 
 app = FastAPI(title="HabitFlow FastAPI Backend")
 
@@ -34,6 +34,7 @@ def startup():
     db = SessionLocal()
     try:
         seed_badges(db)
+        seed_circles(db)
     finally:
         db.close()
 
@@ -45,6 +46,7 @@ app.include_router(checkins.router)
 app.include_router(stats.router)
 app.include_router(badges.router)
 app.include_router(exports.router)
+app.include_router(social.router)
 
 
 @app.get("/")
