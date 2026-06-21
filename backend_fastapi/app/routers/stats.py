@@ -1,12 +1,13 @@
-from datetime import date
+from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from ..business import completed_count, current_streak_days, goal_progress
 from ..common import ok
 from ..deps import get_current_user, get_db
-from ..models import CheckIn, Goal, User
+from ..inspirations import get_inspiration
+from ..models import CheckIn, Goal, User, UserBadge, Badge
 
 router = APIRouter(prefix="/api/stats", tags=["统计"])
 
@@ -55,3 +56,87 @@ def dashboard(current_user: User = Depends(get_current_user), db: Session = Depe
             "goalProgress": progress,
         }
     )
+
+
+@router.get("/timeline")
+def growth_timeline(
+    days: int = Query(default=30, ge=0, le=3650),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """成长日志时间线：按日期倒序展示打卡记录、获得勋章、每日推荐"""
+    start_date = None if days == 0 else date.today() - timedelta(days=days - 1)
+
+    # 1. 查询打卡记录
+    checkins_query = (
+        db.query(CheckIn, Goal.name, Goal.type)
+        .join(Goal, CheckIn.goal_id == Goal.id)
+        .filter(
+            CheckIn.user_id == current_user.id,
+            CheckIn.status == "DONE",
+        )
+        .order_by(CheckIn.check_date.desc(), CheckIn.check_time.desc())
+    )
+    if start_date is not None:
+        checkins_query = checkins_query.filter(CheckIn.check_date >= start_date)
+    checkins = checkins_query.all()
+
+    # 2. 查询获得的勋章
+    badges_query = (
+        db.query(UserBadge, Badge.name, Badge.description)
+        .join(Badge, UserBadge.badge_id == Badge.id)
+        .filter(
+            UserBadge.user_id == current_user.id,
+        )
+        .order_by(UserBadge.obtained_time.desc())
+    )
+    if start_date is not None:
+        badges_query = badges_query.filter(UserBadge.obtained_time >= start_date)
+    badges_obtained = badges_query.all()
+
+    # 3. 按日期合并数据
+    timeline = {}
+    all_dates = set()
+
+    for checkin, goal_name, goal_type in checkins:
+        d = checkin.check_date.isoformat()
+        all_dates.add(d)
+        if d not in timeline:
+            timeline[d] = {"date": d, "events": []}
+        timeline[d]["events"].append({
+            "type": "checkin",
+            "goalName": goal_name,
+            "goalType": goal_type,
+            "remark": checkin.remark,
+            "makeup": checkin.makeup,
+            "time": checkin.check_time.isoformat(),
+        })
+
+    for ub, badge_name, badge_desc in badges_obtained:
+        d = ub.obtained_time.strftime("%Y-%m-%d")
+        if d not in timeline:
+            timeline[d] = {"date": d, "events": []}
+            all_dates.add(d)
+        timeline[d]["events"].append({
+            "type": "badge",
+            "badgeName": badge_name,
+            "badgeDescription": badge_desc,
+        })
+
+    # 4. 对有打卡记录的日期附加一条每日推荐
+    for d in timeline:
+        events = timeline[d]["events"]
+        has_checkin = any(e["type"] == "checkin" for e in events)
+        if has_checkin:
+            # 取当天第一个打卡的目标类型
+            goal_type = next(e["goalType"] for e in events if e["type"] == "checkin")
+            insp = get_inspiration(goal_type)
+            timeline[d]["events"].append({
+                "type": "inspiration",
+                "content": insp["content"],
+                "cn": insp["cn"],
+            })
+
+    # 5. 按日期倒序排列
+    sorted_dates = sorted(timeline.keys(), reverse=True)
+    return ok([timeline[d] for d in sorted_dates])

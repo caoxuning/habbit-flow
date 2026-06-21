@@ -16,6 +16,10 @@ http.interceptors.request.use((config) => {
 
 http.interceptors.response.use(
   (response) => {
+    // 导出等二进制流请求跳过拦截器
+    if (response.config.__skipIntercept) {
+      return response.data
+    }
     const body = response.data
     if (body.code !== 200) {
       ElMessage.error(body.message || '请求失败')

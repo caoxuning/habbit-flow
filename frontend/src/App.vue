@@ -49,6 +49,10 @@
           <el-icon><Calendar /></el-icon>
           <span>打卡记录</span>
         </el-menu-item>
+        <el-menu-item index="timeline">
+          <el-icon><Timer /></el-icon>
+          <span>成长日志</span>
+        </el-menu-item>
         <el-menu-item index="badges">
           <el-icon><Medal /></el-icon>
           <span>勋章奖励</span>
@@ -68,6 +72,7 @@
           <p>{{ viewSubtitle }}</p>
         </div>
         <div class="top-actions">
+          <el-button v-if="activeView === 'checkins'" :icon="Download" @click="exportCheckIns">导出打卡记录</el-button>
           <el-button :icon="Refresh" @click="loadAll">刷新</el-button>
           <el-button type="primary" :icon="Plus" @click="openGoalDialog()">新建目标</el-button>
         </div>
@@ -96,6 +101,28 @@
             <div ref="rateChartRef" class="chart"></div>
           </section>
         </div>
+        <section class="panel timeline-preview">
+          <div class="panel-head">
+            <h3>成长日志预览</h3>
+            <el-button size="small" text @click="activeView = 'timeline'">查看全部</el-button>
+          </div>
+          <el-timeline v-if="timelineList.length > 0">
+            <el-timeline-item
+              v-for="item in timelineList.slice(0, 7)"
+              :key="item.date"
+              :timestamp="item.date"
+              placement="top"
+            >
+              <div v-for="evt in item.events" :key="evt.time || evt.badgeName || evt.content">
+                <div v-if="evt.type === 'checkin'" style="margin-bottom: 4px;">
+                  <strong>{{ evt.goalName }}</strong>
+                  <p v-if="evt.remark" style="margin: 2px 0;">{{ evt.remark }}</p>
+                </div>
+              </div>
+            </el-timeline-item>
+          </el-timeline>
+          <el-empty v-else description="暂无成长记录" />
+        </section>
       </div>
 
       <div v-if="activeView === 'goals'" class="panel">
@@ -196,6 +223,47 @@
         </section>
       </div>
 
+      <div v-if="activeView === 'timeline'" class="panel">
+        <div class="panel-head">
+          <h3>成长日志时间线</h3>
+          <div>
+            <span style="font-size: 14px; color: #909399; margin-right: 8px;">近</span>
+            <el-select v-model="timelineDays" style="width: 100px;" @change="loadTimeline">
+              <el-option label="7天" :value="7" />
+              <el-option label="30天" :value="30" />
+              <el-option label="90天" :value="90" />
+              <el-option label="全部" :value="0" />
+            </el-select>
+          </div>
+        </div>
+        <el-timeline v-if="timelineList.length > 0">
+          <el-timeline-item
+            v-for="item in timelineList"
+            :key="item.date"
+            :timestamp="item.date"
+            placement="top"
+          >
+            <div v-for="evt in item.events" :key="evt.time || evt.badgeName || evt.content">
+              <div v-if="evt.type === 'checkin'" style="margin-bottom: 8px;">
+                <strong>{{ evt.goalName }}</strong>
+                <p v-if="evt.remark" style="margin: 4px 0;">{{ evt.remark }}</p>
+                <el-tag v-if="evt.makeup" size="small" type="warning">补卡</el-tag>
+              </div>
+              <div v-else-if="evt.type === 'badge'" style="margin-bottom: 8px;">
+                <el-tag type="success" size="small">🏅 {{ evt.badgeName }}</el-tag>
+                <small style="color: #909399; margin-left: 6px;">{{ evt.badgeDescription }}</small>
+              </div>
+              <div v-else-if="evt.type === 'inspiration'" style="margin-bottom: 8px; padding: 8px; background: #f5f7fa; border-radius: 6px;">
+                <small style="color: #909399;">💡 推荐</small>
+                <p style="margin: 4px 0;">{{ evt.content }}</p>
+                <small v-if="evt.cn" style="color: #909399;">{{ evt.cn }}</small>
+              </div>
+            </div>
+          </el-timeline-item>
+        </el-timeline>
+        <el-empty v-else description="暂无成长记录" />
+      </div>
+
       <div v-if="activeView === 'badges'" class="badge-grid">
         <article v-for="badge in badges" :key="badge.id" class="badge-card">
           <div class="badge-icon"><el-icon><Medal /></el-icon></div>
@@ -283,9 +351,9 @@
 <script setup>
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import * as echarts from 'echarts'
-import { ElMessage } from 'element-plus'
-import { Aim, Bell, Calendar, Check, DataAnalysis, Edit, Lock, Medal, Plus, Refresh, SwitchButton, User } from '@element-plus/icons-vue'
-import { authApi, badgeApi, checkInApi, goalApi, statsApi, userApi } from './api'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Aim, Bell, Calendar, Check, DataAnalysis, Download, Edit, Lock, Medal, Plus, Refresh, SwitchButton, Timer, User } from '@element-plus/icons-vue'
+import { authApi, badgeApi, checkInApi, exportApi, goalApi, statsApi, userApi } from './api'
 
 const token = ref(localStorage.getItem('habitflow_token'))
 const profile = ref(JSON.parse(localStorage.getItem('habitflow_profile') || 'null'))
@@ -306,6 +374,8 @@ const goalDialogVisible = ref(false)
 const goalForm = reactive(emptyGoal())
 const checkForm = reactive({ goalId: null, remark: '' })
 const makeupForm = reactive({ goalId: null, checkDate: '', remark: '' })
+const timelineList = ref([])
+const timelineDays = ref(30)
 const profileForm = reactive({ username: '', email: '' })
 const passwordForm = reactive({ oldPassword: '', newPassword: '' })
 const statusOptions = [
@@ -318,6 +388,7 @@ const viewTitle = computed(() => ({
   dashboard: '数据概览',
   goals: '目标管理',
   checkins: '打卡管理',
+  timeline: '成长日志',
   badges: '勋章奖励',
   profile: '个人中心'
 }[activeView.value]))
@@ -326,6 +397,7 @@ const viewSubtitle = computed(() => ({
   dashboard: '查看完成次数、连续打卡、完成率与月度成长趋势。',
   goals: '创建目标、设置周期、维护每日目标次数。',
   checkins: '提交每日打卡，处理历史补卡并查看记录。',
+  timeline: '按时间线回顾你的每一次坚持与成长。',
   badges: '系统根据坚持情况自动发放奖励。',
   profile: '维护账号资料并定期更新密码。'
 }[activeView.value]))
@@ -347,6 +419,9 @@ onMounted(() => {
 watch(activeView, () => {
   if (activeView.value === 'dashboard') {
     nextTick(renderCharts)
+  }
+  if (activeView.value === 'timeline') {
+    loadTimeline()
   }
 })
 
@@ -370,12 +445,13 @@ async function submitAuth() {
 
 async function loadAll() {
   if (!token.value) return
-  const [profileData, statsData, goalsData, checksData, badgeData] = await Promise.all([
+  const [profileData, statsData, goalsData, checksData, badgeData, timelineData] = await Promise.all([
     userApi.profile(),
     statsApi.dashboard(),
     goalApi.list(),
     checkInApi.list(),
-    badgeApi.mine()
+    badgeApi.mine(),
+    statsApi.timeline(timelineDays.value)
   ])
   profile.value = profileData
   localStorage.setItem('habitflow_profile', JSON.stringify(profileData))
@@ -384,6 +460,7 @@ async function loadAll() {
   goalRows.value = goalsData
   checkIns.value = checksData
   badges.value = badgeData
+  timelineList.value = timelineData
   await nextTick()
   renderCharts()
 }
@@ -431,20 +508,39 @@ async function deleteGoal(id) {
   await loadAll()
 }
 
+function showInspiration(data) {
+  if (data?.inspiration) {
+    const ins = data.inspiration
+    let msg = `<div style="margin-bottom: 12px;"><strong>${ins.content}</strong></div>`
+    if (ins.cn) msg += `<div style="color: #909399; margin-bottom: 12px;">${ins.cn}</div>`
+    if (ins.example) msg += `<div style="color: #606266; font-style: italic; margin-bottom: 12px;">例句：${ins.example}</div>`
+    if (data.peerTips?.length > 0) {
+      msg += `<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #ebeef5;"><strong>同路人寄语：</strong></div>`
+      data.peerTips.forEach(t => {
+        msg += `<div style="margin-top: 6px; color: #606266;">「${t.remark}」<br><small style="color: #909399;">—— ${t.goalName}</small></div>`
+      })
+    }
+    ElMessageBox.alert(msg, '🎉 打卡成功 · 精选内容', { dangerouslyUseHTMLString: true, confirmButtonText: '继续努力' })
+  } else {
+    ElMessage.success('打卡成功')
+  }
+}
+
 async function quickCheckIn(goal) {
-  await checkInApi.create({ goalId: goal.id, remark: '快速打卡' })
-  ElMessage.success('打卡成功')
+  const data = await checkInApi.create({ goalId: goal.id, remark: '快速打卡' })
+  showInspiration(data)
   await loadAll()
 }
 
 async function submitCheckIn(isMakeup) {
   const form = isMakeup ? makeupForm : checkForm
+  let data
   if (isMakeup) {
-    await checkInApi.makeup(form)
+    data = await checkInApi.makeup(form)
   } else {
-    await checkInApi.create(form)
+    data = await checkInApi.create(form)
   }
-  ElMessage.success(isMakeup ? '补卡成功' : '打卡成功')
+  showInspiration(data)
   Object.assign(form, isMakeup ? { goalId: null, checkDate: '', remark: '' } : { goalId: null, remark: '' })
   await loadAll()
 }
@@ -467,6 +563,31 @@ function logout() {
   localStorage.removeItem('habitflow_profile')
   token.value = ''
   profile.value = null
+}
+
+async function loadTimeline() {
+  try {
+    timelineList.value = await statsApi.timeline(timelineDays.value)
+  } catch {
+    timelineList.value = []
+  }
+}
+
+async function exportCheckIns() {
+  try {
+    const blob = await exportApi.checkins({ format: 'xlsx' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `打卡记录_${new Date().toISOString().slice(0, 10)}.xlsx`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+    ElMessage.success('导出成功')
+  } catch {
+    ElMessage.error('导出失败')
+  }
 }
 
 function goalName(id) {

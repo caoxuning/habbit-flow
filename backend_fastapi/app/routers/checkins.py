@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from ..business import evaluate_and_grant_badges
 from ..common import AppException, ok
 from ..deps import get_current_user, get_db
+from ..inspirations import get_inspiration, get_peer_tips
 from ..models import CheckIn, Goal, User
 from ..schemas import CheckInRequest, check_in_dict
 
@@ -82,7 +83,12 @@ def check_in(
     if check_date != date.today():
         raise AppException("每日打卡只能提交当天记录，历史日期请使用补卡")
     row = save_check_in(db, current_user.id, request, check_date, False)
-    return ok(check_in_dict(row))
+    goal = owned_goal(db, current_user.id, request.goalId)
+    return ok({
+        "checkIn": check_in_dict(row),
+        "inspiration": get_inspiration(goal.type),
+        "peerTips": get_peer_tips(db, goal.type, 3),
+    })
 
 
 @router.post("/makeup")
