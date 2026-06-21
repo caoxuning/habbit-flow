@@ -21,6 +21,7 @@ router = APIRouter(prefix="/api/exports", tags=["导出"])
 @router.get("/checkins")
 def export_checkins(
     format: str = Query(default="xlsx"),
+    goalId: int | None = Query(default=None),
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
     current_user: User = Depends(get_current_user),
@@ -28,7 +29,7 @@ def export_checkins(
 ):
     """
     导出打卡记录为 Excel 文件
-    支持通过 start_date 和 end_date 筛选日期范围
+    支持通过 goalId、start_date 和 end_date 筛选范围
     """
     if format.lower() != "xlsx":
         raise AppException("暂只支持导出 xlsx 格式")
@@ -44,6 +45,8 @@ def export_checkins(
         query = query.filter(CheckIn.check_date >= start_date)
     if end_date:
         query = query.filter(CheckIn.check_date <= end_date)
+    if goalId is not None:
+        query = query.filter(CheckIn.goal_id == goalId)
 
     rows = query.order_by(CheckIn.check_date.desc(), CheckIn.check_time.desc()).all()
 

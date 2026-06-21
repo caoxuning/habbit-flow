@@ -10,14 +10,14 @@
         <el-tab-pane label="登录" name="login" />
         <el-tab-pane label="注册" name="register" />
       </el-tabs>
-      <el-form :model="authForm" label-position="top" @submit.prevent>
-        <el-form-item label="用户名">
+      <el-form ref="authFormRef" :model="authForm" :rules="authRules" label-position="top" @submit.prevent>
+        <el-form-item label="用户名" prop="username">
           <el-input v-model="authForm.username" :prefix-icon="User" />
         </el-form-item>
-        <el-form-item label="密码">
+        <el-form-item label="密码" prop="password">
           <el-input v-model="authForm.password" type="password" show-password :prefix-icon="Lock" />
         </el-form-item>
-        <el-form-item v-if="authMode === 'register'" label="邮箱">
+        <el-form-item v-if="authMode === 'register'" label="邮箱" prop="email">
           <el-input v-model="authForm.email" />
         </el-form-item>
         <el-button type="primary" class="full-button" :loading="authLoading" @click="submitAuth">
@@ -155,11 +155,15 @@
           </el-table-column>
           <el-table-column label="操作" width="230" fixed="right">
             <template #default="{ row }">
-              <el-button size="small" type="primary" :icon="Check" @click="quickCheckIn(row.goal)">打卡</el-button>
+              <el-tooltip :disabled="row.goal.status === 'ACTIVE'" content="只有进行中的目标可以打卡">
+                <span>
+                  <el-button size="small" type="primary" :icon="Check" :disabled="row.goal.status !== 'ACTIVE'" @click="quickCheckIn(row.goal)">打卡</el-button>
+                </span>
+              </el-tooltip>
               <el-button size="small" :icon="Edit" @click="openGoalDialog(row.goal)">编辑</el-button>
-              <el-popconfirm title="确认删除该目标？" @confirm="deleteGoal(row.goal.id)">
+              <el-popconfirm title="确认归档该目标？历史打卡记录会保留。" @confirm="deleteGoal(row.goal.id)">
                 <template #reference>
-                  <el-button size="small" type="danger">删除</el-button>
+                  <el-button size="small" type="danger">归档</el-button>
                 </template>
               </el-popconfirm>
             </template>
@@ -176,7 +180,7 @@
           <el-form :model="checkForm" label-position="top">
             <el-form-item label="目标">
               <el-select v-model="checkForm.goalId" class="full-button" placeholder="选择目标">
-                <el-option v-for="row in goalRows" :key="row.goal.id" :label="row.goal.name" :value="row.goal.id" />
+                <el-option v-for="row in activeGoalRows" :key="row.goal.id" :label="row.goal.name" :value="row.goal.id" />
               </el-select>
             </el-form-item>
             <el-form-item label="备注">
@@ -194,7 +198,7 @@
           <el-form :model="makeupForm" label-position="top">
             <el-form-item label="目标">
               <el-select v-model="makeupForm.goalId" class="full-button" placeholder="选择目标">
-                <el-option v-for="row in goalRows" :key="row.goal.id" :label="row.goal.name" :value="row.goal.id" />
+                <el-option v-for="row in activeGoalRows" :key="row.goal.id" :label="row.goal.name" :value="row.goal.id" />
               </el-select>
             </el-form-item>
             <el-form-item label="补卡日期">
@@ -212,16 +216,32 @@
             <h3>打卡记录</h3>
             <el-icon><Calendar /></el-icon>
           </div>
+          <div class="record-tools">
+            <el-select v-model="recordFilters.goalId" clearable placeholder="全部目标" @change="loadCheckIns">
+              <el-option v-for="row in goalRows" :key="row.goal.id" :label="row.goal.name" :value="row.goal.id" />
+            </el-select>
+            <el-date-picker
+              v-model="recordFilters.dateRange"
+              type="daterange"
+              value-format="YYYY-MM-DD"
+              start-placeholder="开始日期"
+              end-placeholder="结束日期"
+              @change="loadCheckIns"
+            />
+          </div>
           <el-table :data="checkIns" height="560" stripe>
             <el-table-column prop="checkDate" label="日期" width="120" />
             <el-table-column label="目标" min-width="140">
-              <template #default="{ row }">{{ goalName(row.goalId) }}</template>
+              <template #default="{ row }">{{ row.goalName || goalName(row.goalId) }}</template>
             </el-table-column>
             <el-table-column prop="remark" label="备注" min-width="160" />
             <el-table-column label="类型" width="90">
               <template #default="{ row }">
                 <el-tag :type="row.makeup ? 'warning' : 'success'">{{ row.makeup ? '补卡' : '打卡' }}</el-tag>
               </template>
+            </el-table-column>
+            <el-table-column label="打卡时间" width="170">
+              <template #default="{ row }">{{ formatDateTime(row.checkTime) }}</template>
             </el-table-column>
           </el-table>
         </section>
@@ -274,6 +294,7 @@
           <strong>{{ badge.name }}</strong>
           <p>{{ badge.description }}</p>
           <small>{{ badge.conditionText }}</small>
+          <small v-if="badge.obtainedTime">获得时间：{{ formatDateTime(badge.obtainedTime) }}</small>
         </article>
         <el-empty v-if="badges.length === 0" description="完成首次打卡即可获得第一枚勋章" />
       </div>
@@ -445,6 +466,9 @@
             <el-form-item label="邮箱">
               <el-input v-model="profileForm.email" />
             </el-form-item>
+            <el-form-item label="账号创建时间">
+              <el-input :model-value="formatDateTime(profile?.createTime)" disabled />
+            </el-form-item>
             <el-button type="primary" @click="saveProfile">保存资料</el-button>
           </el-form>
         </section>
@@ -460,6 +484,9 @@
             <el-form-item label="新密码">
               <el-input v-model="passwordForm.newPassword" type="password" show-password />
             </el-form-item>
+            <el-form-item label="确认新密码">
+              <el-input v-model="passwordForm.confirmPassword" type="password" show-password />
+            </el-form-item>
             <el-button @click="changePassword">更新密码</el-button>
           </el-form>
         </section>
@@ -467,30 +494,32 @@
     </main>
 
     <el-dialog v-model="goalDialogVisible" :title="goalForm.id ? '编辑目标' : '新建目标'" width="520px">
-      <el-form :model="goalForm" label-position="top">
-        <el-form-item label="目标名称">
+      <el-form ref="goalFormRef" :model="goalForm" :rules="goalRules" label-position="top">
+        <el-form-item label="目标名称" prop="name">
           <el-input v-model="goalForm.name" placeholder="每天运动30分钟" />
         </el-form-item>
-        <el-form-item label="目标类型">
-          <el-input v-model="goalForm.type" placeholder="运动、学习、阅读" />
+        <el-form-item label="目标类型" prop="type">
+          <el-select v-model="goalForm.type" class="full-button" filterable allow-create default-first-option placeholder="选择或输入类型">
+            <el-option v-for="item in goalTypeOptions" :key="item" :label="item" :value="item" />
+          </el-select>
         </el-form-item>
         <div class="form-grid">
-          <el-form-item label="开始日期">
+          <el-form-item label="开始日期" prop="startDate">
             <el-date-picker v-model="goalForm.startDate" value-format="YYYY-MM-DD" type="date" class="full-button" />
           </el-form-item>
-          <el-form-item label="结束日期">
+          <el-form-item label="结束日期" prop="endDate">
             <el-date-picker v-model="goalForm.endDate" value-format="YYYY-MM-DD" type="date" class="full-button" />
           </el-form-item>
         </div>
         <div class="form-grid">
-          <el-form-item label="目标周期">
+          <el-form-item label="目标周期" prop="cycle">
             <el-select v-model="goalForm.cycle" class="full-button">
               <el-option label="每日" value="DAILY" />
               <el-option label="每周" value="WEEKLY" />
               <el-option label="每月" value="MONTHLY" />
             </el-select>
           </el-form-item>
-          <el-form-item label="每日目标次数">
+          <el-form-item label="每日目标次数" prop="dailyTargetCount">
             <el-input-number v-model="goalForm.dailyTargetCount" :min="1" class="full-button" />
           </el-form-item>
         </div>
@@ -519,6 +548,7 @@ const authMode = ref('login')
 const authLoading = ref(false)
 const activeView = ref('dashboard')
 const authForm = reactive({ username: '', password: '', email: '' })
+const authFormRef = ref()
 const dashboard = ref(null)
 const goalRows = ref([])
 const checkIns = ref([])
@@ -535,13 +565,15 @@ let monthlyChart
 let rateChart
 
 const goalDialogVisible = ref(false)
+const goalFormRef = ref()
 const goalForm = reactive(emptyGoal())
 const checkForm = reactive({ goalId: null, remark: '' })
 const makeupForm = reactive({ goalId: null, checkDate: '', remark: '' })
+const recordFilters = reactive({ goalId: null, dateRange: [] })
 const timelineList = ref([])
 const timelineDays = ref(30)
 const profileForm = reactive({ username: '', email: '' })
-const passwordForm = reactive({ oldPassword: '', newPassword: '' })
+const passwordForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
 const userKeyword = ref('')
 const socialTab = ref('friends')
 const selectedCircleId = ref(null)
@@ -552,6 +584,26 @@ const statusOptions = [
   { label: '已暂停', value: 'PAUSED' },
   { label: '已完成', value: 'DONE' }
 ]
+const goalTypeOptions = ['学习', '运动', '阅读', '英语', '早睡', '健身']
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const authRules = computed(() => ({
+  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+  password: [{ required: true, min: 6, message: '密码至少 6 位', trigger: 'blur' }],
+  email: authMode.value === 'register'
+    ? [
+        { required: true, message: '请输入邮箱', trigger: 'blur' },
+        { pattern: emailPattern, message: '请输入有效邮箱', trigger: 'blur' }
+      ]
+    : []
+}))
+const goalRules = {
+  name: [{ required: true, message: '请输入目标名称', trigger: 'blur' }],
+  type: [{ required: true, message: '请选择或输入目标类型', trigger: 'change' }],
+  startDate: [{ required: true, message: '请选择开始日期', trigger: 'change' }],
+  endDate: [{ required: true, message: '请选择结束日期', trigger: 'change' }],
+  cycle: [{ required: true, message: '请选择目标周期', trigger: 'change' }],
+  dailyTargetCount: [{ required: true, type: 'number', min: 1, message: '每日目标次数至少为 1', trigger: 'change' }]
+}
 
 const viewTitle = computed(() => ({
   dashboard: '数据概览',
@@ -580,6 +632,7 @@ const metrics = computed(() => [
   { label: '连续打卡天数', value: dashboard.value?.currentStreakDays ?? 0 },
   { label: '平均完成率', value: `${dashboard.value?.averageCompletionRate ?? 0}%` }
 ])
+const activeGoalRows = computed(() => goalRows.value.filter((item) => item.goal.status === 'ACTIVE'))
 
 onMounted(() => {
   if (token.value) {
@@ -597,6 +650,7 @@ watch(activeView, () => {
 })
 
 async function submitAuth() {
+  await authFormRef.value?.validate()
   authLoading.value = true
   try {
     const data = authMode.value === 'login'
@@ -616,11 +670,10 @@ async function submitAuth() {
 
 async function loadAll() {
   if (!token.value) return
-  const [profileData, statsData, goalsData, checksData, badgeData, timelineData] = await Promise.all([
+  const [profileData, statsData, goalsData, badgeData, timelineData] = await Promise.all([
     userApi.profile(),
     statsApi.dashboard(),
     goalApi.list(),
-    checkInApi.list(),
     badgeApi.mine(),
     statsApi.timeline(timelineDays.value)
   ])
@@ -629,8 +682,8 @@ async function loadAll() {
   Object.assign(profileForm, { username: profileData.username, email: profileData.email })
   dashboard.value = statsData
   goalRows.value = goalsData
-  checkIns.value = checksData
   badges.value = badgeData
+  await loadCheckIns()
   await loadSocialData()
   await nextTick()
   renderCharts()
@@ -678,10 +731,16 @@ function renderCharts() {
 
 function openGoalDialog(goal) {
   Object.assign(goalForm, goal ? { ...goal } : emptyGoal())
+  nextTick(() => goalFormRef.value?.clearValidate())
   goalDialogVisible.value = true
 }
 
 async function saveGoal() {
+  await goalFormRef.value?.validate()
+  if (goalForm.endDate < goalForm.startDate) {
+    ElMessage.warning('结束日期不能早于开始日期')
+    return
+  }
   const payload = { ...goalForm }
   if (goalForm.id) {
     await goalApi.update(goalForm.id, payload)
@@ -695,7 +754,7 @@ async function saveGoal() {
 
 async function deleteGoal(id) {
   await goalApi.remove(id)
-  ElMessage.success('目标已删除')
+  ElMessage.success('目标已归档，历史记录已保留')
   await loadAll()
 }
 
@@ -718,6 +777,10 @@ function showInspiration(data) {
 }
 
 async function quickCheckIn(goal) {
+  if (goal.status !== 'ACTIVE') {
+    ElMessage.warning('只有进行中的目标可以打卡')
+    return
+  }
   const data = await checkInApi.create({ goalId: goal.id, remark: '快速打卡' })
   showInspiration(data)
   await loadAll()
@@ -725,6 +788,14 @@ async function quickCheckIn(goal) {
 
 async function submitCheckIn(isMakeup) {
   const form = isMakeup ? makeupForm : checkForm
+  if (!form.goalId) {
+    ElMessage.warning('请选择目标')
+    return
+  }
+  if (isMakeup && !form.checkDate) {
+    ElMessage.warning('请选择补卡日期')
+    return
+  }
   let data
   if (isMakeup) {
     data = await checkInApi.makeup(form)
@@ -737,6 +808,14 @@ async function submitCheckIn(isMakeup) {
 }
 
 async function saveProfile() {
+  if (!profileForm.username.trim()) {
+    ElMessage.warning('请输入用户名')
+    return
+  }
+  if (profileForm.email && !emailPattern.test(profileForm.email)) {
+    ElMessage.warning('请输入有效邮箱')
+    return
+  }
   const data = await userApi.updateProfile(profileForm)
   profile.value = data
   localStorage.setItem('habitflow_profile', JSON.stringify(data))
@@ -744,8 +823,20 @@ async function saveProfile() {
 }
 
 async function changePassword() {
+  if (!passwordForm.oldPassword || !passwordForm.newPassword) {
+    ElMessage.warning('请填写原密码和新密码')
+    return
+  }
+  if (passwordForm.newPassword.length < 6) {
+    ElMessage.warning('新密码至少 6 位')
+    return
+  }
+  if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+    ElMessage.warning('两次输入的新密码不一致')
+    return
+  }
   await userApi.changePassword(passwordForm)
-  Object.assign(passwordForm, { oldPassword: '', newPassword: '' })
+  Object.assign(passwordForm, { oldPassword: '', newPassword: '', confirmPassword: '' })
   ElMessage.success('密码已更新')
 }
 
@@ -828,7 +919,13 @@ async function loadTimeline() {
 
 async function exportCheckIns() {
   try {
-    const blob = await exportApi.checkins({ format: 'xlsx' })
+    const [startDate, endDate] = recordFilters.dateRange || []
+    const blob = await exportApi.checkins({
+      format: 'xlsx',
+      goalId: recordFilters.goalId || undefined,
+      start_date: startDate || undefined,
+      end_date: endDate || undefined
+    })
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -843,8 +940,22 @@ async function exportCheckIns() {
   }
 }
 
+async function loadCheckIns() {
+  const [startDate, endDate] = recordFilters.dateRange || []
+  checkIns.value = await checkInApi.list({
+    goalId: recordFilters.goalId || undefined,
+    start_date: startDate || undefined,
+    end_date: endDate || undefined
+  })
+}
+
 function goalName(id) {
   return goalRows.value.find((item) => item.goal.id === id)?.goal.name || `目标 ${id}`
+}
+
+function formatDateTime(value) {
+  if (!value) return ''
+  return String(value).replace('T', ' ').slice(0, 16)
 }
 
 function cycleLabel(cycle) {

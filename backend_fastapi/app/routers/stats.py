@@ -35,14 +35,18 @@ def monthly_report(db: Session, user_id: int):
 
 @router.get("/dashboard")
 def dashboard(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    total_goals = db.query(Goal).filter(Goal.user_id == current_user.id).count()
+    total_goals = (
+        db.query(Goal)
+        .filter(Goal.user_id == current_user.id, Goal.status != "ARCHIVED")
+        .count()
+    )
     active_goals = (
         db.query(Goal)
         .filter(Goal.user_id == current_user.id, Goal.status == "ACTIVE")
         .count()
     )
     total_check_ins = completed_count(db, current_user.id)
-    goals = db.query(Goal).filter(Goal.user_id == current_user.id).all()
+    goals = db.query(Goal).filter(Goal.user_id == current_user.id, Goal.status != "ARCHIVED").all()
     progress = [goal_progress(db, current_user.id, goal) for goal in goals]
     average_rate = 0 if not progress else sum(item["completionRate"] for item in progress) / len(progress)
     return ok(

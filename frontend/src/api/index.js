@@ -19,7 +19,7 @@ export const goalApi = {
 }
 
 export const checkInApi = {
-  list: (goalId) => http.get('/check-ins', { params: { goalId } }),
+  list: (params) => http.get('/check-ins', { params }),
   create: (data) => http.post('/check-ins', data),
   makeup: (data) => http.post('/check-ins/makeup', data)
 }
