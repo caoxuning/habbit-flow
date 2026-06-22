@@ -307,7 +307,7 @@ h1 {
   gap: 6px;
   align-items: center;
   color: #17202a;
-  cursor: pointer;
+  cursor: default;
   text-align: left;
   font: inherit;
 }

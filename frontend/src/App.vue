@@ -123,17 +123,15 @@
               <div class="calendar-cell">
                 <strong class="calendar-day">{{ dayNumber(data.day) }}</strong>
                 <div class="calendar-task-list">
-                  <button
+                  <article
                     v-for="item in goalsForDate(data.day)"
                     :key="`${data.day}-${item.goal.id}`"
                     class="calendar-task"
                     :class="priorityClass(item.goal.priority)"
-                    type="button"
-                    @click.stop="openGoalDialog(item.goal)"
                   >
                     <span>{{ item.goal.name }}</span>
                     <small>{{ priorityLabel(item.goal.priority) }}</small>
-                  </button>
+                  </article>
                 </div>
               </div>
             </template>
@@ -930,7 +928,23 @@ function goalsForDate(day) {
   return goalRows.value
     .filter((item) => item.goal.status === 'ACTIVE')
     .filter((item) => item.goal.startDate <= day && item.goal.endDate >= day)
+    .filter((item) => goalOccursOnDate(item.goal, day))
     .sort((left, right) => priorityRank(right.goal.priority) - priorityRank(left.goal.priority))
+}
+
+function goalOccursOnDate(goal, day) {
+  const current = parseDate(day)
+  const start = parseDate(goal.startDate)
+  if (!current || !start) return false
+  const dayDiff = Math.floor((current - start) / 86400000)
+  if (goal.cycle === 'WEEKLY') return dayDiff % 7 === 0
+  if (goal.cycle === 'MONTHLY') return current.getDate() === start.getDate()
+  return true
+}
+
+function parseDate(value) {
+  const date = new Date(`${value}T00:00:00`)
+  return Number.isNaN(date.getTime()) ? null : date
 }
 
 function priorityRank(priority) {
@@ -943,14 +957,13 @@ function normalizeList(data) {
 
 function emptyGoal() {
   const today = new Date()
-  const end = new Date()
-  end.setMonth(end.getMonth() + 1)
+  const todayText = today.toISOString().slice(0, 10)
   return {
     id: null,
     name: '',
     type: '',
-    startDate: today.toISOString().slice(0, 10),
-    endDate: end.toISOString().slice(0, 10),
+    startDate: todayText,
+    endDate: todayText,
     cycle: 'DAILY',
     dailyTargetCount: 1,
     priority: 'NORMAL',
