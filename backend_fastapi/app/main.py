@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 from .business import seed_badges, seed_circles
 from .common import install_exception_handlers
 from .database import Base, SessionLocal, engine
-from .routers import auth, badges, checkins, goals, social, stats, users
+from .routers import auth, badges, checkins, exports, goals, social, stats, users
 
 app = FastAPI(title="HabitFlow FastAPI Backend")
 
@@ -45,6 +45,7 @@ app.include_router(goals.router)
 app.include_router(checkins.router)
 app.include_router(stats.router)
 app.include_router(badges.router)
+app.include_router(exports.router)
 app.include_router(social.router)
 
 

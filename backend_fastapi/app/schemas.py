@@ -79,8 +79,8 @@ def goal_dict(goal):
     }
 
 
-def check_in_dict(row):
-    return {
+def check_in_dict(row, goal=None):
+    data = {
         "id": row.id,
         "goalId": row.goal_id,
         "userId": row.user_id,
@@ -90,6 +90,10 @@ def check_in_dict(row):
         "remark": row.remark,
         "makeup": row.makeup,
     }
+    if goal is not None:
+        data["goalName"] = goal.name
+        data["goalType"] = goal.type
+    return data
 
 
 def badge_dict(badge, obtained_time: datetime | None = None):

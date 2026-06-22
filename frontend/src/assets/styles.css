@@ -251,6 +251,13 @@ h1 {
   margin-bottom: 12px;
 }
 
+.record-tools {
+  display: grid;
+  grid-template-columns: minmax(180px, 220px) minmax(260px, 1fr);
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
 .social-wide {
   grid-column: 1 / -1;
 }
@@ -391,6 +398,7 @@ h1 {
   }
 
   .inline-form,
+  .record-tools,
   .mini-card.selectable,
   .comment-item {
     grid-template-columns: 1fr;
