@@ -428,9 +428,32 @@
             </div>
             <div class="post-list">
               <article v-for="post in circlePosts" :key="post.id" class="post-item">
-                <strong>{{ post.author.username }} · {{ post.circleName }}</strong>
+                <div class="post-meta">
+                  <strong>{{ post.author.username }} · {{ post.circleName }}</strong>
+                  <small>{{ post.createTime }}</small>
+                </div>
                 <p>{{ post.content }}</p>
-                <small>{{ post.createTime }}</small>
+                <div class="post-actions">
+                  <el-button size="small" :type="post.liked ? 'primary' : 'default'" @click="togglePostLike(post)">
+                    {{ post.liked ? '已赞' : '点赞' }} {{ post.likeCount }}
+                  </el-button>
+                  <el-button size="small" @click="toggleComments(post)">
+                    评论 {{ post.commentCount }}
+                  </el-button>
+                </div>
+                <div v-if="expandedPostId === post.id" class="comment-box">
+                  <div class="inline-form">
+                    <el-input v-model="commentDrafts[post.id]" placeholder="写一条评论" @keyup.enter="submitComment(post)" />
+                    <el-button type="primary" @click="submitComment(post)">发送</el-button>
+                  </div>
+                  <div class="comment-list">
+                    <article v-for="comment in commentsByPost[post.id] || []" :key="comment.id" class="comment-item">
+                      <strong>{{ comment.author.username }}</strong>
+                      <span>{{ comment.content }}</span>
+                    </article>
+                    <el-empty v-if="(commentsByPost[post.id] || []).length === 0" description="还没有评论" />
+                  </div>
+                </div>
               </article>
               <el-empty v-if="circlePosts.length === 0" description="选择一个圈子查看或发布动态" />
             </div>
@@ -444,9 +467,32 @@
           </div>
           <div class="post-list">
             <article v-for="post in feedPosts" :key="post.id" class="post-item">
-              <strong>{{ post.author.username }} · {{ post.circleName }}</strong>
+              <div class="post-meta">
+                <strong>{{ post.author.username }} · {{ post.circleName }}</strong>
+                <small>{{ post.createTime }}</small>
+              </div>
               <p>{{ post.content }}</p>
-              <small>{{ post.createTime }}</small>
+              <div class="post-actions">
+                <el-button size="small" :type="post.liked ? 'primary' : 'default'" @click="togglePostLike(post)">
+                  {{ post.liked ? '已赞' : '点赞' }} {{ post.likeCount }}
+                </el-button>
+                <el-button size="small" @click="toggleComments(post)">
+                  评论 {{ post.commentCount }}
+                </el-button>
+              </div>
+              <div v-if="expandedPostId === post.id" class="comment-box">
+                <div class="inline-form">
+                  <el-input v-model="commentDrafts[post.id]" placeholder="写一条评论" @keyup.enter="submitComment(post)" />
+                  <el-button type="primary" @click="submitComment(post)">发送</el-button>
+                </div>
+                <div class="comment-list">
+                  <article v-for="comment in commentsByPost[post.id] || []" :key="comment.id" class="comment-item">
+                    <strong>{{ comment.author.username }}</strong>
+                    <span>{{ comment.content }}</span>
+                  </article>
+                  <el-empty v-if="(commentsByPost[post.id] || []).length === 0" description="还没有评论" />
+                </div>
+              </div>
             </article>
             <el-empty v-if="feedPosts.length === 0" description="加入圈子后即可查看动态流" />
           </div>
@@ -579,6 +625,9 @@ const socialTab = ref('friends')
 const selectedCircleId = ref(null)
 const circleForm = reactive({ name: '', description: '', icon: '' })
 const postForm = reactive({ content: '' })
+const expandedPostId = ref(null)
+const commentDrafts = reactive({})
+const commentsByPost = reactive({})
 const statusOptions = [
   { label: '进行中', value: 'ACTIVE' },
   { label: '已暂停', value: 'PAUSED' },
@@ -900,6 +949,42 @@ async function publishPost() {
   ElMessage.success('动态已发布')
   await loadCirclePosts(selectedCircleId.value)
   feedPosts.value = normalizeList(await socialApi.feed())
+}
+
+async function togglePostLike(post) {
+  const data = post.liked
+    ? await socialApi.unlikePost(post.id)
+    : await socialApi.likePost(post.id)
+  updatePostInteraction(post.id, { liked: data.liked, likeCount: data.likeCount })
+}
+
+async function toggleComments(post) {
+  expandedPostId.value = expandedPostId.value === post.id ? null : post.id
+  if (expandedPostId.value === post.id) {
+    await loadComments(post.id)
+  }
+}
+
+async function loadComments(postId) {
+  commentsByPost[postId] = await socialApi.comments(postId)
+}
+
+async function submitComment(post) {
+  const content = (commentDrafts[post.id] || '').trim()
+  if (!content) return
+  await socialApi.commentPost(post.id, { content })
+  commentDrafts[post.id] = ''
+  await loadComments(post.id)
+  updatePostInteraction(post.id, { commentCount: (post.commentCount || 0) + 1 })
+}
+
+function updatePostInteraction(postId, patch) {
+  for (const collection of [circlePosts.value, feedPosts.value]) {
+    const target = collection.find((item) => item.id === postId)
+    if (target) {
+      Object.assign(target, patch)
+    }
+  }
 }
 
 function logout() {

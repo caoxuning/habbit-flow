@@ -2,6 +2,8 @@ CREATE DATABASE IF NOT EXISTS habitflow DEFAULT CHARACTER SET utf8mb4 COLLATE ut
 USE habitflow;
 
 DROP TABLE IF EXISTS user_badge;
+DROP TABLE IF EXISTS post_comment;
+DROP TABLE IF EXISTS post_like;
 DROP TABLE IF EXISTS circle_post;
 DROP TABLE IF EXISTS circle_member;
 DROP TABLE IF EXISTS social_circle;
@@ -98,6 +100,29 @@ CREATE TABLE circle_post (
   CONSTRAINT fk_post_circle FOREIGN KEY (circle_id) REFERENCES social_circle(id),
   CONSTRAINT fk_post_user FOREIGN KEY (user_id) REFERENCES user(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='圈子帖子表';
+
+CREATE TABLE post_like (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '点赞编号',
+  post_id BIGINT NOT NULL COMMENT '帖子编号',
+  user_id BIGINT NOT NULL COMMENT '用户编号',
+  create_time DATETIME NOT NULL COMMENT '点赞时间',
+  UNIQUE KEY uk_post_like_user (post_id, user_id),
+  INDEX idx_like_user (user_id),
+  CONSTRAINT fk_like_post FOREIGN KEY (post_id) REFERENCES circle_post(id),
+  CONSTRAINT fk_like_user FOREIGN KEY (user_id) REFERENCES user(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='帖子点赞表';
+
+CREATE TABLE post_comment (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '评论编号',
+  post_id BIGINT NOT NULL COMMENT '帖子编号',
+  user_id BIGINT NOT NULL COMMENT '用户编号',
+  content TEXT NOT NULL COMMENT '评论内容',
+  create_time DATETIME NOT NULL COMMENT '评论时间',
+  INDEX idx_comment_post_time (post_id, create_time),
+  INDEX idx_comment_user (user_id),
+  CONSTRAINT fk_comment_post FOREIGN KEY (post_id) REFERENCES circle_post(id),
+  CONSTRAINT fk_comment_user FOREIGN KEY (user_id) REFERENCES user(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='帖子评论表';
 
 CREATE TABLE badge (
   id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '勋章编号',
