@@ -1,12 +1,12 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from ..business import goal_progress
 from ..common import AppException, ok
 from ..deps import get_current_user, get_db
-from ..models import CheckIn, Goal, User
+from ..models import Goal, User
 from ..schemas import GoalRequest, goal_dict
 
 router = APIRouter(prefix="/api/goals", tags=["目标"])
@@ -30,10 +30,16 @@ def fill_goal(goal: Goal, request: GoalRequest):
 
 
 @router.get("")
-def list_goals(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def list_goals(
+    includeArchived: bool = Query(default=False),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    query = db.query(Goal).filter(Goal.user_id == current_user.id)
+    if not includeArchived:
+        query = query.filter(Goal.status != "ARCHIVED")
     goals = (
-        db.query(Goal)
-        .filter(Goal.user_id == current_user.id)
+        query
         .order_by(Goal.create_time.desc())
         .all()
     )
@@ -83,7 +89,7 @@ def delete_goal(
     db: Session = Depends(get_db),
 ):
     goal = owned_goal(db, current_user.id, goal_id)
-    db.query(CheckIn).filter(CheckIn.user_id == current_user.id, CheckIn.goal_id == goal.id).delete()
-    db.delete(goal)
+    goal.status = "ARCHIVED"
+    goal.update_time = datetime.now()
     db.commit()
     return ok()

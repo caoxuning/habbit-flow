@@ -19,13 +19,18 @@ export const goalApi = {
 }
 
 export const checkInApi = {
-  list: (goalId) => http.get('/check-ins', { params: { goalId } }),
+  list: (params) => http.get('/check-ins', { params }),
   create: (data) => http.post('/check-ins', data),
   makeup: (data) => http.post('/check-ins/makeup', data)
 }
 
 export const statsApi = {
-  dashboard: () => http.get('/stats/dashboard')
+  dashboard: () => http.get('/stats/dashboard'),
+  timeline: (days) => http.get('/stats/timeline', { params: { days } })
+}
+
+export const exportApi = {
+  checkins: (params) => http.get('/exports/checkins', { params, responseType: 'blob', __skipIntercept: true })
 }
 
 export const badgeApi = {

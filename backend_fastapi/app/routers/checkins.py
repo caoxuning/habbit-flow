@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from ..business import evaluate_and_grant_badges
 from ..common import AppException, ok
 from ..deps import get_current_user, get_db
+from ..inspirations import get_inspiration, get_peer_tips
 from ..models import CheckIn, Goal, User
 from ..schemas import CheckInRequest, check_in_dict
 
@@ -62,14 +63,24 @@ def save_check_in(
 @router.get("")
 def list_checkins(
     goalId: int | None = Query(default=None),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    query = db.query(CheckIn).filter(CheckIn.user_id == current_user.id)
+    query = (
+        db.query(CheckIn, Goal)
+        .join(Goal, CheckIn.goal_id == Goal.id)
+        .filter(CheckIn.user_id == current_user.id)
+    )
     if goalId is not None:
         query = query.filter(CheckIn.goal_id == goalId)
+    if start_date is not None:
+        query = query.filter(CheckIn.check_date >= start_date)
+    if end_date is not None:
+        query = query.filter(CheckIn.check_date <= end_date)
     rows = query.order_by(CheckIn.check_date.desc(), CheckIn.check_time.desc()).all()
-    return ok([check_in_dict(row) for row in rows])
+    return ok([check_in_dict(row, goal) for row, goal in rows])
 
 
 @router.post("")
@@ -82,7 +93,12 @@ def check_in(
     if check_date != date.today():
         raise AppException("每日打卡只能提交当天记录，历史日期请使用补卡")
     row = save_check_in(db, current_user.id, request, check_date, False)
-    return ok(check_in_dict(row))
+    goal = owned_goal(db, current_user.id, request.goalId)
+    return ok({
+        "checkIn": check_in_dict(row),
+        "inspiration": get_inspiration(goal.type),
+        "peerTips": get_peer_tips(db, goal.type, 3),
+    })
 
 
 @router.post("/makeup")

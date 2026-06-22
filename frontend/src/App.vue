@@ -10,14 +10,14 @@
         <el-tab-pane label="登录" name="login" />
         <el-tab-pane label="注册" name="register" />
       </el-tabs>
-      <el-form :model="authForm" label-position="top" @submit.prevent>
-        <el-form-item label="用户名">
+      <el-form ref="authFormRef" :model="authForm" :rules="authRules" label-position="top" @submit.prevent>
+        <el-form-item label="用户名" prop="username">
           <el-input v-model="authForm.username" :prefix-icon="User" />
         </el-form-item>
-        <el-form-item label="密码">
+        <el-form-item label="密码" prop="password">
           <el-input v-model="authForm.password" type="password" show-password :prefix-icon="Lock" />
         </el-form-item>
-        <el-form-item v-if="authMode === 'register'" label="邮箱">
+        <el-form-item v-if="authMode === 'register'" label="邮箱" prop="email">
           <el-input v-model="authForm.email" />
         </el-form-item>
         <el-button type="primary" class="full-button" :loading="authLoading" @click="submitAuth">
@@ -53,6 +53,10 @@
           <el-icon><Calendar /></el-icon>
           <span>打卡记录</span>
         </el-menu-item>
+        <el-menu-item index="timeline">
+          <el-icon><Timer /></el-icon>
+          <span>成长日志</span>
+        </el-menu-item>
         <el-menu-item index="badges">
           <el-icon><Medal /></el-icon>
           <span>勋章奖励</span>
@@ -76,6 +80,7 @@
           <p>{{ viewSubtitle }}</p>
         </div>
         <div class="top-actions">
+          <el-button v-if="activeView === 'checkins'" :icon="Download" @click="exportCheckIns">导出打卡记录</el-button>
           <el-button :icon="Refresh" @click="loadAll">刷新</el-button>
         </div>
       </header>
@@ -103,6 +108,28 @@
             <div ref="rateChartRef" class="chart"></div>
           </section>
         </div>
+        <section class="panel timeline-preview">
+          <div class="panel-head">
+            <h3>成长日志预览</h3>
+            <el-button size="small" text @click="activeView = 'timeline'">查看全部</el-button>
+          </div>
+          <el-timeline v-if="timelineList.length > 0">
+            <el-timeline-item
+              v-for="item in timelineList.slice(0, 7)"
+              :key="item.date"
+              :timestamp="item.date"
+              placement="top"
+            >
+              <div v-for="evt in item.events" :key="evt.time || evt.badgeName || evt.content">
+                <div v-if="evt.type === 'checkin'" style="margin-bottom: 4px;">
+                  <strong>{{ evt.goalName }}</strong>
+                  <p v-if="evt.remark" style="margin: 2px 0;">{{ evt.remark }}</p>
+                </div>
+              </div>
+            </el-timeline-item>
+          </el-timeline>
+          <el-empty v-else description="暂无成长记录" />
+        </section>
       </div>
 
       <div v-if="activeView === 'calendar'" class="calendar-layout">
@@ -192,11 +219,15 @@
           </el-table-column>
           <el-table-column label="操作" width="230" fixed="right">
             <template #default="{ row }">
-              <el-button size="small" type="primary" :icon="Check" @click="quickCheckIn(row.goal)">打卡</el-button>
+              <el-tooltip :disabled="row.goal.status === 'ACTIVE'" content="只有进行中的目标可以打卡">
+                <span>
+                  <el-button size="small" type="primary" :icon="Check" :disabled="row.goal.status !== 'ACTIVE'" @click="quickCheckIn(row.goal)">打卡</el-button>
+                </span>
+              </el-tooltip>
               <el-button size="small" :icon="Edit" @click="openGoalDialog(row.goal)">编辑</el-button>
-              <el-popconfirm title="确认删除该目标？" @confirm="deleteGoal(row.goal.id)">
+              <el-popconfirm title="确认归档该目标？历史打卡记录会保留。" @confirm="deleteGoal(row.goal.id)">
                 <template #reference>
-                  <el-button size="small" type="danger">删除</el-button>
+                  <el-button size="small" type="danger">归档</el-button>
                 </template>
               </el-popconfirm>
             </template>
@@ -213,7 +244,7 @@
           <el-form :model="checkForm" label-position="top">
             <el-form-item label="目标">
               <el-select v-model="checkForm.goalId" class="full-button" placeholder="选择目标">
-                <el-option v-for="row in goalRows" :key="row.goal.id" :label="row.goal.name" :value="row.goal.id" />
+                <el-option v-for="row in activeGoalRows" :key="row.goal.id" :label="row.goal.name" :value="row.goal.id" />
               </el-select>
             </el-form-item>
             <el-form-item label="备注">
@@ -231,7 +262,7 @@
           <el-form :model="makeupForm" label-position="top">
             <el-form-item label="目标">
               <el-select v-model="makeupForm.goalId" class="full-button" placeholder="选择目标">
-                <el-option v-for="row in goalRows" :key="row.goal.id" :label="row.goal.name" :value="row.goal.id" />
+                <el-option v-for="row in activeGoalRows" :key="row.goal.id" :label="row.goal.name" :value="row.goal.id" />
               </el-select>
             </el-form-item>
             <el-form-item label="补卡日期">
@@ -249,10 +280,23 @@
             <h3>打卡记录</h3>
             <el-icon><Calendar /></el-icon>
           </div>
+          <div class="record-tools">
+            <el-select v-model="recordFilters.goalId" clearable placeholder="全部目标" @change="loadCheckIns">
+              <el-option v-for="row in goalRows" :key="row.goal.id" :label="row.goal.name" :value="row.goal.id" />
+            </el-select>
+            <el-date-picker
+              v-model="recordFilters.dateRange"
+              type="daterange"
+              value-format="YYYY-MM-DD"
+              start-placeholder="开始日期"
+              end-placeholder="结束日期"
+              @change="loadCheckIns"
+            />
+          </div>
           <el-table :data="checkIns" height="560" stripe>
             <el-table-column prop="checkDate" label="日期" width="120" />
             <el-table-column label="目标" min-width="140">
-              <template #default="{ row }">{{ goalName(row.goalId) }}</template>
+              <template #default="{ row }">{{ row.goalName || goalName(row.goalId) }}</template>
             </el-table-column>
             <el-table-column prop="remark" label="备注" min-width="160" />
             <el-table-column label="类型" width="90">
@@ -260,8 +304,52 @@
                 <el-tag :type="row.makeup ? 'warning' : 'success'">{{ row.makeup ? '补卡' : '打卡' }}</el-tag>
               </template>
             </el-table-column>
+            <el-table-column label="打卡时间" width="170">
+              <template #default="{ row }">{{ formatDateTime(row.checkTime) }}</template>
+            </el-table-column>
           </el-table>
         </section>
+      </div>
+
+      <div v-if="activeView === 'timeline'" class="panel">
+        <div class="panel-head">
+          <h3>成长日志时间线</h3>
+          <div>
+            <span style="font-size: 14px; color: #909399; margin-right: 8px;">近</span>
+            <el-select v-model="timelineDays" style="width: 100px;" @change="loadTimeline">
+              <el-option label="7天" :value="7" />
+              <el-option label="30天" :value="30" />
+              <el-option label="90天" :value="90" />
+              <el-option label="全部" :value="0" />
+            </el-select>
+          </div>
+        </div>
+        <el-timeline v-if="timelineList.length > 0">
+          <el-timeline-item
+            v-for="item in timelineList"
+            :key="item.date"
+            :timestamp="item.date"
+            placement="top"
+          >
+            <div v-for="evt in item.events" :key="evt.time || evt.badgeName || evt.content">
+              <div v-if="evt.type === 'checkin'" style="margin-bottom: 8px;">
+                <strong>{{ evt.goalName }}</strong>
+                <p v-if="evt.remark" style="margin: 4px 0;">{{ evt.remark }}</p>
+                <el-tag v-if="evt.makeup" size="small" type="warning">补卡</el-tag>
+              </div>
+              <div v-else-if="evt.type === 'badge'" style="margin-bottom: 8px;">
+                <el-tag type="success" size="small">🏅 {{ evt.badgeName }}</el-tag>
+                <small style="color: #909399; margin-left: 6px;">{{ evt.badgeDescription }}</small>
+              </div>
+              <div v-else-if="evt.type === 'inspiration'" style="margin-bottom: 8px; padding: 8px; background: #f5f7fa; border-radius: 6px;">
+                <small style="color: #909399;">💡 推荐</small>
+                <p style="margin: 4px 0;">{{ evt.content }}</p>
+                <small v-if="evt.cn" style="color: #909399;">{{ evt.cn }}</small>
+              </div>
+            </div>
+          </el-timeline-item>
+        </el-timeline>
+        <el-empty v-else description="暂无成长记录" />
       </div>
 
       <div v-if="activeView === 'badges'" class="badge-grid">
@@ -270,6 +358,7 @@
           <strong>{{ badge.name }}</strong>
           <p>{{ badge.description }}</p>
           <small>{{ badge.conditionText }}</small>
+          <small v-if="badge.obtainedTime">获得时间：{{ formatDateTime(badge.obtainedTime) }}</small>
         </article>
         <el-empty v-if="badges.length === 0" description="完成首次打卡即可获得第一枚勋章" />
       </div>
@@ -559,6 +648,9 @@
             <el-form-item label="邮箱">
               <el-input v-model="profileForm.email" />
             </el-form-item>
+            <el-form-item label="账号创建时间">
+              <el-input :model-value="formatDateTime(profile?.createTime)" disabled />
+            </el-form-item>
             <el-button type="primary" @click="saveProfile">保存资料</el-button>
           </el-form>
         </section>
@@ -581,33 +673,35 @@
     </main>
 
     <el-dialog v-model="goalDialogVisible" :title="goalForm.id ? '编辑目标' : '新建目标'" width="520px">
-      <el-form :model="goalForm" label-position="top">
-        <el-form-item label="目标名称">
+      <el-form ref="goalFormRef" :model="goalForm" :rules="goalRules" label-position="top">
+        <el-form-item label="目标名称" prop="name">
           <el-input v-model="goalForm.name" placeholder="每天运动30分钟" />
         </el-form-item>
-        <el-form-item label="目标类型">
-          <el-input v-model="goalForm.type" placeholder="运动、学习、阅读" />
+        <el-form-item label="目标类型" prop="type">
+          <el-select v-model="goalForm.type" class="full-button" filterable allow-create default-first-option placeholder="选择或输入类型">
+            <el-option v-for="item in goalTypeOptions" :key="item" :label="item" :value="item" />
+          </el-select>
         </el-form-item>
         <el-form-item label="重要程度">
           <el-segmented v-model="goalForm.priority" :options="priorityOptions" />
         </el-form-item>
         <div class="form-grid">
-          <el-form-item label="开始日期">
+          <el-form-item label="开始日期" prop="startDate">
             <el-date-picker v-model="goalForm.startDate" value-format="YYYY-MM-DD" type="date" class="full-button" />
           </el-form-item>
-          <el-form-item label="结束日期">
+          <el-form-item label="结束日期" prop="endDate">
             <el-date-picker v-model="goalForm.endDate" value-format="YYYY-MM-DD" type="date" class="full-button" />
           </el-form-item>
         </div>
         <div class="form-grid">
-          <el-form-item label="目标周期">
+          <el-form-item label="目标周期" prop="cycle">
             <el-select v-model="goalForm.cycle" class="full-button">
               <el-option label="每日" value="DAILY" />
               <el-option label="每周" value="WEEKLY" />
               <el-option label="每月" value="MONTHLY" />
             </el-select>
           </el-form-item>
-          <el-form-item label="每日目标次数">
+          <el-form-item label="每日目标次数" prop="dailyTargetCount">
             <el-input-number v-model="goalForm.dailyTargetCount" :min="1" class="full-button" />
           </el-form-item>
         </div>
@@ -629,6 +723,9 @@
         <el-form-item label="新密码">
           <el-input v-model="passwordForm.newPassword" type="password" show-password />
         </el-form-item>
+        <el-form-item label="确认新密码">
+          <el-input v-model="passwordForm.confirmPassword" type="password" show-password />
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="passwordDialogVisible = false">取消</el-button>
@@ -641,9 +738,9 @@
 <script setup>
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import * as echarts from 'echarts'
-import { ElMessage } from 'element-plus'
-import { Aim, Bell, Calendar, Check, DataAnalysis, Edit, Lock, Medal, Plus, Refresh, SwitchButton, User } from '@element-plus/icons-vue'
-import { authApi, badgeApi, checkInApi, goalApi, socialApi, statsApi, userApi } from './api'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Aim, Bell, Calendar, Check, DataAnalysis, Download, Edit, Lock, Medal, Plus, Refresh, SwitchButton, Timer, User } from '@element-plus/icons-vue'
+import { authApi, badgeApi, checkInApi, exportApi, goalApi, socialApi, statsApi, userApi } from './api'
 
 const token = ref(localStorage.getItem('habitflow_token'))
 const profile = ref(JSON.parse(localStorage.getItem('habitflow_profile') || 'null'))
@@ -651,6 +748,7 @@ const authMode = ref('login')
 const authLoading = ref(false)
 const activeView = ref('dashboard')
 const authForm = reactive({ username: '', password: '', email: '' })
+const authFormRef = ref()
 const dashboard = ref(null)
 const goalRows = ref([])
 const checkIns = ref([])
@@ -668,11 +766,15 @@ let monthlyChart
 let rateChart
 
 const goalDialogVisible = ref(false)
+const goalFormRef = ref()
 const goalForm = reactive(emptyGoal())
 const checkForm = reactive({ goalId: null, remark: '' })
 const makeupForm = reactive({ goalId: null, checkDate: '', remark: '' })
+const recordFilters = reactive({ goalId: null, dateRange: [] })
+const timelineList = ref([])
+const timelineDays = ref(30)
 const profileForm = reactive({ username: '', email: '' })
-const passwordForm = reactive({ oldPassword: '', newPassword: '' })
+const passwordForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
 const passwordDialogVisible = ref(false)
 const userKeyword = ref('')
 const socialTab = ref('friends')
@@ -695,12 +797,33 @@ const priorityOptions = [
   { label: '重要', value: 'IMPORTANT' },
   { label: '紧急', value: 'URGENT' }
 ]
+const goalTypeOptions = ['学习', '运动', '阅读', '英语', '早睡', '健身']
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const authRules = computed(() => ({
+  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+  password: [{ required: true, min: 6, message: '密码至少 6 位', trigger: 'blur' }],
+  email: authMode.value === 'register'
+    ? [
+        { required: true, message: '请输入邮箱', trigger: 'blur' },
+        { pattern: emailPattern, message: '请输入有效邮箱', trigger: 'blur' }
+      ]
+    : []
+}))
+const goalRules = {
+  name: [{ required: true, message: '请输入目标名称', trigger: 'blur' }],
+  type: [{ required: true, message: '请选择或输入目标类型', trigger: 'change' }],
+  startDate: [{ required: true, message: '请选择开始日期', trigger: 'change' }],
+  endDate: [{ required: true, message: '请选择结束日期', trigger: 'change' }],
+  cycle: [{ required: true, message: '请选择目标周期', trigger: 'change' }],
+  dailyTargetCount: [{ required: true, type: 'number', min: 1, message: '每日目标次数至少为 1', trigger: 'change' }]
+}
 
 const viewTitle = computed(() => ({
   dashboard: '数据概览',
   calendar: '任务日历',
   goals: '目标管理',
   checkins: '打卡管理',
+  timeline: '成长日志',
   badges: '勋章奖励',
   social: '社交圈子',
   profile: '个人中心'
@@ -711,6 +834,7 @@ const viewSubtitle = computed(() => ({
   calendar: '按日期查看每天需要推进的目标，并用颜色区分任务紧急程度。',
   goals: '创建目标、设置周期、维护每日目标次数。',
   checkins: '提交每日打卡，处理历史补卡并查看记录。',
+  timeline: '按时间线回顾你的每一次坚持与成长。',
   badges: '系统根据坚持情况自动发放奖励。',
   social: '搜索好友、加入圈子、发布动态并查看同伴进展。',
   profile: '维护账号资料并定期更新密码。'
@@ -723,6 +847,7 @@ const metrics = computed(() => [
   { label: '连续打卡天数', value: dashboard.value?.currentStreakDays ?? 0 },
   { label: '平均完成率', value: `${dashboard.value?.averageCompletionRate ?? 0}%` }
 ])
+const activeGoalRows = computed(() => goalRows.value.filter((item) => item.goal.status === 'ACTIVE'))
 
 const todayGoals = computed(() => goalsForDate(new Date().toISOString().slice(0, 10)))
 const selectedChatFriend = computed(() => friends.value.find((friend) => friend.id === selectedChatFriendId.value))
@@ -750,6 +875,7 @@ watch(socialTab, () => {
 })
 
 async function submitAuth() {
+  await authFormRef.value?.validate()
   authLoading.value = true
   try {
     const data = authMode.value === 'login'
@@ -769,20 +895,20 @@ async function submitAuth() {
 
 async function loadAll() {
   if (!token.value) return
-  const [profileData, statsData, goalsData, checksData, badgeData] = await Promise.all([
+  const [profileData, statsData, goalsData, badgeData, timelineData] = await Promise.all([
     userApi.profile(),
     statsApi.dashboard(),
     goalApi.list(),
-    checkInApi.list(),
-    badgeApi.mine()
+    badgeApi.mine(),
+    statsApi.timeline(timelineDays.value)
   ])
   profile.value = profileData
   localStorage.setItem('habitflow_profile', JSON.stringify(profileData))
   Object.assign(profileForm, { username: profileData.username, email: profileData.email })
   dashboard.value = statsData
   goalRows.value = goalsData
-  checkIns.value = checksData
   badges.value = badgeData
+  await loadCheckIns()
   await loadSocialData()
   await nextTick()
   renderCharts()
@@ -839,10 +965,16 @@ function renderCharts() {
 
 function openGoalDialog(goal) {
   Object.assign(goalForm, goal ? { ...goal } : emptyGoal())
+  nextTick(() => goalFormRef.value?.clearValidate())
   goalDialogVisible.value = true
 }
 
 async function saveGoal() {
+  await goalFormRef.value?.validate()
+  if (goalForm.endDate < goalForm.startDate) {
+    ElMessage.warning('结束日期不能早于开始日期')
+    return
+  }
   const payload = { ...goalForm }
   if (goalForm.id) {
     await goalApi.update(goalForm.id, payload)
@@ -856,29 +988,68 @@ async function saveGoal() {
 
 async function deleteGoal(id) {
   await goalApi.remove(id)
-  ElMessage.success('目标已删除')
+  ElMessage.success('目标已归档，历史记录已保留')
   await loadAll()
 }
 
+function showInspiration(data) {
+  if (data?.inspiration) {
+    const ins = data.inspiration
+    let msg = `<div style="margin-bottom: 12px;"><strong>${ins.content}</strong></div>`
+    if (ins.cn) msg += `<div style="color: #909399; margin-bottom: 12px;">${ins.cn}</div>`
+    if (ins.example) msg += `<div style="color: #606266; font-style: italic; margin-bottom: 12px;">例句：${ins.example}</div>`
+    if (data.peerTips?.length > 0) {
+      msg += `<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #ebeef5;"><strong>同路人寄语：</strong></div>`
+      data.peerTips.forEach(t => {
+        msg += `<div style="margin-top: 6px; color: #606266;">「${t.remark}」<br><small style="color: #909399;">—— ${t.goalName}</small></div>`
+      })
+    }
+    ElMessageBox.alert(msg, '🎉 打卡成功 · 精选内容', { dangerouslyUseHTMLString: true, confirmButtonText: '继续努力' })
+  } else {
+    ElMessage.success('打卡成功')
+  }
+}
+
 async function quickCheckIn(goal) {
-  await checkInApi.create({ goalId: goal.id, remark: '快速打卡' })
-  ElMessage.success('打卡成功')
+  if (goal.status !== 'ACTIVE') {
+    ElMessage.warning('只有进行中的目标可以打卡')
+    return
+  }
+  const data = await checkInApi.create({ goalId: goal.id, remark: '快速打卡' })
+  showInspiration(data)
   await loadAll()
 }
 
 async function submitCheckIn(isMakeup) {
   const form = isMakeup ? makeupForm : checkForm
-  if (isMakeup) {
-    await checkInApi.makeup(form)
-  } else {
-    await checkInApi.create(form)
+  if (!form.goalId) {
+    ElMessage.warning('请选择目标')
+    return
   }
-  ElMessage.success(isMakeup ? '补卡成功' : '打卡成功')
+  if (isMakeup && !form.checkDate) {
+    ElMessage.warning('请选择补卡日期')
+    return
+  }
+  let data
+  if (isMakeup) {
+    data = await checkInApi.makeup(form)
+  } else {
+    data = await checkInApi.create(form)
+  }
+  showInspiration(data)
   Object.assign(form, isMakeup ? { goalId: null, checkDate: '', remark: '' } : { goalId: null, remark: '' })
   await loadAll()
 }
 
 async function saveProfile() {
+  if (!profileForm.username.trim()) {
+    ElMessage.warning('请输入用户名')
+    return
+  }
+  if (profileForm.email && !emailPattern.test(profileForm.email)) {
+    ElMessage.warning('请输入有效邮箱')
+    return
+  }
   const data = await userApi.updateProfile(profileForm)
   profile.value = data
   localStorage.setItem('habitflow_profile', JSON.stringify(data))
@@ -886,14 +1057,26 @@ async function saveProfile() {
 }
 
 async function changePassword() {
+  if (!passwordForm.oldPassword || !passwordForm.newPassword) {
+    ElMessage.warning('请填写原密码和新密码')
+    return
+  }
+  if (passwordForm.newPassword.length < 6) {
+    ElMessage.warning('新密码至少 6 位')
+    return
+  }
+  if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+    ElMessage.warning('两次输入的新密码不一致')
+    return
+  }
   await userApi.changePassword(passwordForm)
-  Object.assign(passwordForm, { oldPassword: '', newPassword: '' })
+  Object.assign(passwordForm, { oldPassword: '', newPassword: '', confirmPassword: '' })
   passwordDialogVisible.value = false
   ElMessage.success('密码已更新')
 }
 
 function openPasswordDialog() {
-  Object.assign(passwordForm, { oldPassword: '', newPassword: '' })
+  Object.assign(passwordForm, { oldPassword: '', newPassword: '', confirmPassword: '' })
   passwordDialogVisible.value = true
 }
 
@@ -1033,8 +1216,53 @@ function logout() {
   profile.value = null
 }
 
+async function loadTimeline() {
+  try {
+    timelineList.value = await statsApi.timeline(timelineDays.value)
+  } catch {
+    timelineList.value = []
+  }
+}
+
+async function exportCheckIns() {
+  try {
+    const [startDate, endDate] = recordFilters.dateRange || []
+    const blob = await exportApi.checkins({
+      format: 'xlsx',
+      goalId: recordFilters.goalId || undefined,
+      start_date: startDate || undefined,
+      end_date: endDate || undefined
+    })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `打卡记录_${new Date().toISOString().slice(0, 10)}.xlsx`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+    ElMessage.success('导出成功')
+  } catch {
+    ElMessage.error('导出失败')
+  }
+}
+
+async function loadCheckIns() {
+  const [startDate, endDate] = recordFilters.dateRange || []
+  checkIns.value = await checkInApi.list({
+    goalId: recordFilters.goalId || undefined,
+    start_date: startDate || undefined,
+    end_date: endDate || undefined
+  })
+}
+
 function goalName(id) {
   return goalRows.value.find((item) => item.goal.id === id)?.goal.name || `目标 ${id}`
+}
+
+function formatDateTime(value) {
+  if (!value) return ''
+  return String(value).replace('T', ' ').slice(0, 16)
 }
 
 function cycleLabel(cycle) {
