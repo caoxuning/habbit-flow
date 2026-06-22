@@ -12,6 +12,7 @@ from app.models import (
     CheckIn,
     CircleMember,
     CirclePost,
+    DirectMessage,
     Friendship,
     Goal,
     PostComment,
@@ -30,7 +31,8 @@ DEMO_USERS = [
     ("member2", "member2@habitflow.local"),
     ("member3", "member3@habitflow.local"),
 ]
-DEMO_CIRCLES = ["课设冲刺圈", "早起自律圈"]
+DEMO_CIRCLES = ["运动打卡圈", "英语打卡圈"]
+RESET_CIRCLE_NAMES = [*DEMO_CIRCLES, "课设冲刺圈", "早起自律圈"]
 
 
 def current_time():
@@ -53,7 +55,15 @@ def ensure_user(db, username: str, email: str) -> User:
     return user
 
 
-def ensure_goal(db, user: User, name: str, goal_type: str, days_before: int, days_after: int) -> Goal:
+def ensure_goal(
+    db,
+    user: User,
+    name: str,
+    goal_type: str,
+    days_before: int,
+    days_after: int,
+    priority: str = "NORMAL",
+) -> Goal:
     goal = db.query(Goal).filter(Goal.user_id == user.id, Goal.name == name).first()
     today = date.today()
     start_date = today - timedelta(days=days_before)
@@ -67,6 +77,7 @@ def ensure_goal(db, user: User, name: str, goal_type: str, days_before: int, day
             end_date=end_date,
             cycle="DAILY",
             daily_target_count=1,
+            priority=priority,
             status="ACTIVE",
             create_time=current_time(),
             update_time=current_time(),
@@ -77,6 +88,7 @@ def ensure_goal(db, user: User, name: str, goal_type: str, days_before: int, day
     goal.end_date = end_date
     goal.cycle = "DAILY"
     goal.daily_target_count = 1
+    goal.priority = priority
     goal.status = "ACTIVE"
     goal.update_time = current_time()
     return goal
@@ -194,13 +206,34 @@ def ensure_comment(db, post: CirclePost, user: User, content: str):
         db.add(PostComment(post_id=post.id, user_id=user.id, content=content, create_time=current_time()))
 
 
+def ensure_message(db, sender: User, receiver: User, content: str, minutes_ago: int):
+    exists = (
+        db.query(DirectMessage)
+        .filter(
+            DirectMessage.sender_id == sender.id,
+            DirectMessage.receiver_id == receiver.id,
+            DirectMessage.content == content,
+        )
+        .first()
+    )
+    if exists is None:
+        db.add(
+            DirectMessage(
+                sender_id=sender.id,
+                receiver_id=receiver.id,
+                content=content,
+                create_time=current_time() - timedelta(minutes=minutes_ago),
+            )
+        )
+
+
 def reset_demo(db):
     users = db.query(User).filter(User.username.in_([username for username, _ in DEMO_USERS])).all()
     user_ids = [user.id for user in users]
     circle_ids = [
         row[0]
         for row in db.query(SocialCircle.id)
-        .filter((SocialCircle.name.in_(DEMO_CIRCLES)) | (SocialCircle.owner_user_id.in_(fallback_ids(user_ids))))
+        .filter((SocialCircle.name.in_(RESET_CIRCLE_NAMES)) | (SocialCircle.owner_user_id.in_(fallback_ids(user_ids))))
         .all()
     ]
     post_ids = [
@@ -225,6 +258,10 @@ def reset_demo(db):
         (Friendship.requester_id.in_(fallback_ids(user_ids)))
         | (Friendship.addressee_id.in_(fallback_ids(user_ids)))
     ).delete(synchronize_session=False)
+    db.query(DirectMessage).filter(
+        (DirectMessage.sender_id.in_(fallback_ids(user_ids)))
+        | (DirectMessage.receiver_id.in_(fallback_ids(user_ids)))
+    ).delete(synchronize_session=False)
     db.query(UserBadge).filter(UserBadge.user_id.in_(fallback_ids(user_ids))).delete(synchronize_session=False)
     db.query(CheckIn).filter(CheckIn.user_id.in_(fallback_ids(user_ids))).delete(synchronize_session=False)
     db.query(Goal).filter(Goal.user_id.in_(fallback_ids(user_ids))).delete(synchronize_session=False)
@@ -238,55 +275,59 @@ def seed_demo(db):
 
     goals = {
         "demo_admin": [
-            ensure_goal(db, users["demo_admin"], "每天背 30 个单词", "STUDY", 35, 30),
-            ensure_goal(db, users["demo_admin"], "每晚 20 分钟复盘", "REFLECTION", 20, 40),
+            ensure_goal(db, users["demo_admin"], "每天背 30 个单词", "STUDY", 35, 30, "IMPORTANT"),
+            ensure_goal(db, users["demo_admin"], "晚间拉伸 15 分钟", "SPORT", 20, 40, "NORMAL"),
         ],
         "member1": [
-            ensure_goal(db, users["member1"], "早起 7 点前起床", "LIFE", 28, 30),
-            ensure_goal(db, users["member1"], "跑步 3 公里", "SPORT", 18, 30),
+            ensure_goal(db, users["member1"], "早起 7 点前起床", "LIFE", 28, 30, "NORMAL"),
+            ensure_goal(db, users["member1"], "跑步 3 公里", "SPORT", 18, 30, "IMPORTANT"),
         ],
         "member2": [
-            ensure_goal(db, users["member2"], "阅读专业书 20 页", "READING", 25, 30),
+            ensure_goal(db, users["member2"], "阅读专业书 20 页", "READING", 25, 30, "IMPORTANT"),
         ],
         "member3": [
-            ensure_goal(db, users["member3"], "完成课设开发任务", "PROJECT", 30, 30),
-            ensure_goal(db, users["member3"], "整理接口联调记录", "PROJECT", 12, 30),
+            ensure_goal(db, users["member3"], "力量训练 45 分钟", "SPORT", 30, 30, "URGENT"),
+            ensure_goal(db, users["member3"], "英语听力精听 20 分钟", "STUDY", 12, 30, "IMPORTANT"),
         ],
     }
 
-    remarks = ["今天状态不错", "补上昨天记录", "按计划完成", "有点累但坚持了", "继续保持节奏"]
+    remarks = ["按计划完成", "今天状态不错", "补上昨天记录", "有点累但坚持了", "继续保持节奏"]
     for username, user_goals in goals.items():
         streak_days = {"demo_admin": 12, "member1": 6, "member2": 9, "member3": 15}[username]
         for index in range(streak_days):
             ensure_check_in(db, users[username], user_goals[0], index, remarks[index % len(remarks)])
         if len(user_goals) > 1:
             for index in (0, 2, 4, 7, 10):
-                ensure_check_in(db, users[username], user_goals[1], index, "第二目标同步完成")
+                ensure_check_in(db, users[username], user_goals[1], index, "完成今日训练安排")
 
-    ensure_friendship(db, users["member3"], users["demo_admin"], "ACCEPTED", "一起联调核心链路")
+    ensure_friendship(db, users["member3"], users["demo_admin"], "ACCEPTED", "一起坚持运动和英语打卡")
     ensure_friendship(db, users["member3"], users["member1"], "ACCEPTED", "互相监督打卡")
-    ensure_friendship(db, users["member2"], users["member3"], "PENDING", "申请加入你的学习小组")
+    ensure_friendship(db, users["member2"], users["member3"], "PENDING", "一起交流阅读和英语学习")
+    ensure_message(db, users["demo_admin"], users["member3"], "今天英语听力做了吗？我刚听完一篇慢速新闻。", 160)
+    ensure_message(db, users["member3"], users["demo_admin"], "做了，精听 20 分钟，准备晚上再跟读一遍。", 135)
+    ensure_message(db, users["member1"], users["member3"], "晚上还去跑步吗？我想把 3 公里坚持下来。", 95)
+    ensure_message(db, users["member3"], users["member1"], "去，先慢跑热身，别一开始就冲配速。", 70)
 
-    sprint = ensure_circle(db, "课设冲刺圈", "中期展示前集中记录开发、联调、测试进度。", "CODE", users["member3"])
-    morning = ensure_circle(db, "早起自律圈", "用早起和复盘建立稳定节奏。", "SUN", users["demo_admin"])
-    for circle in (sprint, morning):
+    sport = ensure_circle(db, "运动打卡圈", "记录跑步、力量训练和拉伸恢复，和同伴一起保持运动节奏。", "FIT", users["member3"])
+    english = ensure_circle(db, "英语打卡圈", "分享背单词、听力精听和口语练习，稳定积累英语输入输出。", "EN", users["demo_admin"])
+    for circle in (sport, english):
         for user in users.values():
             role = "OWNER" if user.id == circle.owner_user_id else "MEMBER"
             ensure_member(db, circle, user, role)
 
     posts = [
-        ensure_post(db, sprint, users["member3"], "今天完成社交模块联调，下一步验证点赞和评论数据是否实时刷新。", 40),
-        ensure_post(db, sprint, users["demo_admin"], "核心链路建议按 注册/登录 -> 建目标 -> 打卡 -> 看统计 -> 社交互动 来演示。", 85),
-        ensure_post(db, morning, users["member1"], "早起打卡第 6 天，准备把跑步目标也接进来。", 130),
+        ensure_post(db, sport, users["member3"], "今天完成 45 分钟力量训练，深蹲和卧推都比上周稳定一些。", 40),
+        ensure_post(db, english, users["demo_admin"], "今天背完 30 个新单词，晚上准备再听一遍 BBC 慢速英语。", 85),
+        ensure_post(db, sport, users["member1"], "早起跑步 3 公里完成，配速比昨天快了一点。", 130),
     ]
     ensure_like(db, posts[0], users["demo_admin"])
     ensure_like(db, posts[0], users["member1"])
     ensure_like(db, posts[1], users["member3"])
-    ensure_comment(db, posts[0], users["demo_admin"], "这个顺序适合中期展示，我来补测试截图。")
-    ensure_comment(db, posts[0], users["member2"], "我这边可以继续补接口文档。")
-    ensure_comment(db, posts[1], users["member3"], "收到，我按这个链路准备演示。")
+    ensure_comment(db, posts[0], users["demo_admin"], "很稳，训练后记得拉伸一下，明天腿部可能会酸。")
+    ensure_comment(db, posts[0], users["member2"], "这个训练量可以，我今天也准备补一组核心训练。")
+    ensure_comment(db, posts[1], users["member3"], "我也在练听力，精听完再跟读效果会更好。")
 
-    for circle in (sprint, morning):
+    for circle in (sport, english):
         circle.member_count = db.query(CircleMember).filter(CircleMember.circle_id == circle.id).count()
 
     db.flush()
@@ -297,7 +338,7 @@ def seed_demo(db):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Seed HabitFlow midterm demo data.")
+    parser = argparse.ArgumentParser(description="Seed HabitFlow demo data.")
     parser.add_argument("--reset-demo", action="store_true", help="delete seeded demo accounts and recreate them")
     args = parser.parse_args()
 

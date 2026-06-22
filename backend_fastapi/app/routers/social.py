@@ -6,15 +6,17 @@ from sqlalchemy.orm import Session
 
 from ..common import AppException, ok
 from ..deps import get_current_user, get_db
-from ..models import CircleMember, CirclePost, Friendship, PostComment, PostLike, SocialCircle, User
+from ..models import CircleMember, CirclePost, DirectMessage, Friendship, PostComment, PostLike, SocialCircle, User
 from ..schemas import (
     CirclePostRequest,
     CircleRequest,
+    DirectMessageRequest,
     FriendRequest,
     PostCommentRequest,
     circle_dict,
     circle_member_dict,
     circle_post_dict,
+    direct_message_dict,
     friend_view,
     friendship_dict,
     post_comment_dict,
@@ -41,6 +43,12 @@ def friendship_between(db: Session, left_user_id: int, right_user_id: int) -> Fr
 def friendship_status(db: Session, current_user_id: int, target_user_id: int) -> str:
     friendship = friendship_between(db, current_user_id, target_user_id)
     return "NONE" if friendship is None else friendship.status
+
+
+def require_friendship(db: Session, current_user_id: int, target_user_id: int):
+    friendship = friendship_between(db, current_user_id, target_user_id)
+    if friendship is None or friendship.status != "ACCEPTED":
+        raise AppException("成为好友后才能聊天")
 
 
 def get_circle(db: Session, circle_id: int) -> SocialCircle:
@@ -224,6 +232,60 @@ def list_friends(current_user: User = Depends(get_current_user), db: Session = D
         friend = db.query(User).filter(User.id == friend_id).first()
         result.append(friend_view(friend, row))
     return ok(result)
+
+
+@router.get("/friends/{friend_id}/messages")
+def list_direct_messages(
+    friend_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    friend = db.query(User).filter(User.id == friend_id).first()
+    if friend is None:
+        raise AppException("好友不存在", 404)
+    require_friendship(db, current_user.id, friend.id)
+    rows = (
+        db.query(DirectMessage)
+        .filter(
+            or_(
+                (DirectMessage.sender_id == current_user.id) & (DirectMessage.receiver_id == friend.id),
+                (DirectMessage.sender_id == friend.id) & (DirectMessage.receiver_id == current_user.id),
+            )
+        )
+        .order_by(DirectMessage.create_time.asc(), DirectMessage.id.asc())
+        .limit(100)
+        .all()
+    )
+    result = []
+    user_map = {current_user.id: current_user, friend.id: friend}
+    for row in rows:
+        result.append(direct_message_dict(row, user_map[row.sender_id], user_map[row.receiver_id]))
+    return ok(result)
+
+
+@router.post("/friends/{friend_id}/messages")
+def send_direct_message(
+    friend_id: int,
+    request: DirectMessageRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    friend = db.query(User).filter(User.id == friend_id).first()
+    if friend is None:
+        raise AppException("好友不存在", 404)
+    require_friendship(db, current_user.id, friend.id)
+    message = DirectMessage(
+        sender_id=current_user.id,
+        receiver_id=friend.id,
+        content=request.content.strip(),
+        create_time=datetime.now(),
+    )
+    if not message.content:
+        raise AppException("消息内容不能为空")
+    db.add(message)
+    db.commit()
+    db.refresh(message)
+    return ok(direct_message_dict(message, current_user, friend))
 
 
 @router.get("/circles")

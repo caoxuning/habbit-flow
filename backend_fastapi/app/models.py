@@ -25,6 +25,7 @@ class Goal(Base):
     end_date: Mapped[object] = mapped_column(Date, nullable=False)
     cycle: Mapped[str] = mapped_column(String(20), nullable=False)
     daily_target_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    priority: Mapped[str] = mapped_column(String(20), nullable=False, default="NORMAL")
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="ACTIVE")
     create_time: Mapped[object] = mapped_column(DateTime, nullable=False)
     update_time: Mapped[object] = mapped_column(DateTime, nullable=False)
@@ -72,6 +73,16 @@ class Friendship(Base):
     message: Mapped[str | None] = mapped_column(String(255))
     create_time: Mapped[object] = mapped_column(DateTime, nullable=False)
     update_time: Mapped[object] = mapped_column(DateTime, nullable=False)
+
+
+class DirectMessage(Base):
+    __tablename__ = "direct_message"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    sender_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
+    receiver_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    create_time: Mapped[object] = mapped_column(DateTime, nullable=False)
 
 
 class SocialCircle(Base):
