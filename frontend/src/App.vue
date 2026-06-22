@@ -364,17 +364,32 @@
       </div>
 
       <div v-if="activeView === 'social'" class="social-space">
-        <el-tabs v-model="socialTab">
+        <section class="social-hero">
+          <div>
+            <h3>社交圈子</h3>
+            <p>和好友互相提醒，在圈子里记录运动、英语和阅读进展。</p>
+          </div>
+          <div class="social-stats">
+            <span><strong>{{ friends.length }}</strong>好友</span>
+            <span><strong>{{ circles.length }}</strong>圈子</span>
+            <span><strong>{{ feedPosts.length }}</strong>动态</span>
+          </div>
+        </section>
+
+        <el-tabs v-model="socialTab" class="social-tabs">
           <el-tab-pane label="好友管理" name="friends" />
           <el-tab-pane label="好友聊天" name="chat" />
           <el-tab-pane label="圈子广场" name="circles" />
           <el-tab-pane label="社区动态" name="feed" />
         </el-tabs>
 
-        <div v-if="socialTab === 'friends'" class="two-column">
-          <section class="panel">
+        <div v-if="socialTab === 'friends'" class="friends-dashboard">
+          <section class="panel friend-search-panel">
             <div class="panel-head">
-              <h3>用户搜索</h3>
+              <div>
+                <h3>发现好友</h3>
+                <p class="panel-copy">搜索同学账号，发送好友申请后即可聊天。</p>
+              </div>
               <el-icon><User /></el-icon>
             </div>
             <div class="inline-form">
@@ -399,9 +414,12 @@
             </el-table>
           </section>
 
-          <section class="panel">
+          <section class="panel friend-request-panel">
             <div class="panel-head">
-              <h3>好友申请</h3>
+              <div>
+                <h3>好友申请</h3>
+                <p class="panel-copy">处理收到的好友请求。</p>
+              </div>
               <el-icon><Bell /></el-icon>
             </div>
             <el-table :data="friendRequests" height="280" stripe>
@@ -423,15 +441,21 @@
             </el-table>
           </section>
 
-          <section class="panel social-wide">
+          <section class="panel social-wide friend-directory">
             <div class="panel-head">
-              <h3>好友列表</h3>
+              <div>
+                <h3>好友列表</h3>
+                <p class="panel-copy">点击聊天进入会话。</p>
+              </div>
               <el-icon><User /></el-icon>
             </div>
             <div class="friend-list">
-              <article v-for="friend in friends" :key="friend.id" class="mini-card">
-                <strong>{{ friend.username }}</strong>
-                <span>{{ friend.email || '未填写邮箱' }}</span>
+              <article v-for="friend in friends" :key="friend.id" class="friend-card">
+                <div class="avatar-sm">{{ userInitial(friend) }}</div>
+                <div>
+                  <strong>{{ friend.username }}</strong>
+                  <span>{{ friend.email || '未填写邮箱' }}</span>
+                </div>
                 <el-button size="small" type="primary" @click="openChat(friend)">聊天</el-button>
               </article>
               <el-empty v-if="friends.length === 0" description="搜索用户并发送好友申请" />
@@ -440,10 +464,13 @@
         </div>
 
         <div v-if="socialTab === 'chat'" class="chat-layout">
-          <section class="panel chat-friends">
-            <div class="panel-head">
-              <h3>好友</h3>
-              <el-icon><User /></el-icon>
+          <section class="chat-friends">
+            <div class="chat-list-head">
+              <div>
+                <h3>消息</h3>
+                <span>{{ friends.length }} 位好友</span>
+              </div>
+              <el-button text :icon="Refresh" @click="loadSocialData" />
             </div>
             <button
               v-for="friend in friends"
@@ -453,17 +480,22 @@
               type="button"
               @click="openChat(friend)"
             >
-              <strong>{{ friend.username }}</strong>
-              <span>{{ friend.email || '未填写邮箱' }}</span>
+              <div class="chat-avatar">{{ userInitial(friend) }}</div>
+              <div class="chat-friend-main">
+                <strong>{{ friend.username }}</strong>
+                <span>{{ friend.email || '点击打开会话' }}</span>
+              </div>
+              <small>好友</small>
             </button>
             <el-empty v-if="friends.length === 0" description="添加好友后即可聊天" />
           </section>
 
-          <section class="panel chat-panel">
-            <div class="panel-head">
+          <section class="chat-panel">
+            <div class="chat-thread-head">
+              <div class="avatar-sm">{{ selectedChatFriend ? userInitial(selectedChatFriend) : 'H' }}</div>
               <div>
-                <h3>{{ selectedChatFriend ? `和 ${selectedChatFriend.username} 聊天` : '选择好友开始聊天' }}</h3>
-                <p class="panel-copy">好友通过后即可互相发送私信。</p>
+                <h3>{{ selectedChatFriend ? selectedChatFriend.username : '选择好友开始聊天' }}</h3>
+                <span>{{ selectedChatFriend ? '好友 · 私信' : '从左侧选择一个会话' }}</span>
               </div>
               <el-button :icon="Refresh" :disabled="!selectedChatFriendId" @click="loadMessages(selectedChatFriendId)">刷新</el-button>
             </div>
@@ -474,7 +506,7 @@
                 class="message-bubble"
                 :class="{ mine: message.sender.id === profile?.id }"
               >
-                <strong>{{ message.sender.username }}</strong>
+                <strong>{{ message.sender.id === profile?.id ? '我' : message.sender.username }}</strong>
                 <p>{{ message.content }}</p>
                 <small>{{ formatTime(message.createTime) }}</small>
               </article>
@@ -484,7 +516,7 @@
             <div class="message-composer">
               <el-input
                 v-model="messageForm.content"
-                placeholder="输入消息"
+                placeholder="输入消息，按 Enter 发送"
                 :disabled="!selectedChatFriendId"
                 @keyup.enter="sendMessage"
               />
@@ -493,28 +525,44 @@
           </section>
         </div>
 
-        <div v-if="socialTab === 'circles'" class="two-column">
-          <section class="panel">
+        <div v-if="socialTab === 'circles'" class="circle-workspace">
+          <section class="panel circle-sidebar">
             <div class="panel-head">
-              <h3>圈子列表</h3>
+              <div>
+                <h3>圈子广场</h3>
+                <p class="panel-copy">选择圈子查看成员动态。</p>
+              </div>
               <el-icon><Medal /></el-icon>
             </div>
             <div class="circle-list">
-              <article v-for="circle in circles" :key="circle.id" class="mini-card selectable" :class="{ active: selectedCircleId === circle.id }" @click="selectCircle(circle)">
+              <article v-for="circle in circles" :key="circle.id" class="circle-card" :class="{ active: selectedCircleId === circle.id }" @click="selectCircle(circle)">
+                <div class="circle-icon">{{ circle.icon || 'TAG' }}</div>
                 <div>
                   <strong>{{ circle.name }}</strong>
                   <span>{{ circle.description }}</span>
                 </div>
-                <small>{{ circle.memberCount }} 人</small>
                 <el-button size="small" :type="circle.joined ? 'warning' : 'primary'" @click.stop="toggleCircle(circle)">
                   {{ circle.joined ? '退出' : '加入' }}
                 </el-button>
+                <small>{{ circle.memberCount }} 人</small>
               </article>
             </div>
           </section>
 
-          <section class="panel">
+          <section class="panel circle-composer">
             <div class="panel-head">
+              <div>
+                <h3>发布动态</h3>
+                <p class="panel-copy">{{ selectedCircle ? `发布到 ${selectedCircle.name}` : '先选择一个圈子' }}</p>
+              </div>
+              <el-icon><Edit /></el-icon>
+            </div>
+            <el-input v-model="postForm.content" type="textarea" :rows="4" placeholder="分享今天的打卡进展，例如跑步、背单词、阅读笔记" />
+            <el-button class="post-button" type="primary" :icon="Edit" :disabled="!selectedCircleId" @click="publishPost">发布动态</el-button>
+
+            <el-divider />
+
+            <div class="panel-head compact">
               <h3>创建圈子</h3>
               <el-icon><Plus /></el-icon>
             </div>
@@ -530,25 +578,20 @@
               </el-form-item>
               <el-button type="primary" :icon="Plus" @click="createCircle">创建圈子</el-button>
             </el-form>
-
-            <el-divider />
-
-            <div class="panel-head compact">
-              <h3>圈内发帖</h3>
-              <el-icon><Edit /></el-icon>
-            </div>
-            <el-input v-model="postForm.content" type="textarea" :rows="3" placeholder="分享今天的打卡进展" />
-            <el-button class="post-button" type="primary" :icon="Edit" :disabled="!selectedCircleId" @click="publishPost">发布</el-button>
           </section>
 
-          <section class="panel social-wide">
+          <section class="panel social-wide circle-feed-panel">
             <div class="panel-head">
-              <h3>圈子帖子</h3>
+              <div>
+                <h3>{{ selectedCircle ? selectedCircle.name : '圈子帖子' }}</h3>
+                <p class="panel-copy">{{ selectedCircle?.description || '选择一个圈子查看动态。' }}</p>
+              </div>
               <el-icon><Calendar /></el-icon>
             </div>
             <div class="post-list">
               <article v-for="post in circlePosts" :key="post.id" class="post-item">
                 <div class="post-meta">
+                  <div class="avatar-sm">{{ userInitial(post.author) }}</div>
                   <strong>{{ post.author.username }} · {{ post.circleName }}</strong>
                   <small>{{ post.createTime }}</small>
                 </div>
@@ -580,14 +623,18 @@
           </section>
         </div>
 
-        <section v-if="socialTab === 'feed'" class="panel">
+        <section v-if="socialTab === 'feed'" class="panel feed-panel">
           <div class="panel-head">
-            <h3>我的圈子动态</h3>
+            <div>
+              <h3>我的圈子动态</h3>
+              <p class="panel-copy">你加入的圈子动态会汇总在这里。</p>
+            </div>
             <el-icon><Calendar /></el-icon>
           </div>
           <div class="post-list">
             <article v-for="post in feedPosts" :key="post.id" class="post-item">
               <div class="post-meta">
+                <div class="avatar-sm">{{ userInitial(post.author) }}</div>
                 <strong>{{ post.author.username }} · {{ post.circleName }}</strong>
                 <small>{{ post.createTime }}</small>
               </div>
@@ -621,15 +668,17 @@
 
       <div v-if="activeView === 'profile'" class="profile-layout">
         <section class="panel profile-card">
-          <div class="profile-avatar">{{ profileInitial }}</div>
-          <div>
-            <h3>{{ profile?.username }}</h3>
-            <p>{{ profile?.email || '暂未填写邮箱' }}</p>
+          <div class="profile-cover">
+            <div class="profile-avatar">{{ profileInitial }}</div>
+            <div>
+              <h3>{{ profile?.username }}</h3>
+              <p>{{ profile?.email || '暂未填写邮箱' }}</p>
+            </div>
           </div>
           <div class="profile-stats">
-            <span>目标 {{ dashboard?.totalGoals ?? 0 }}</span>
-            <span>打卡 {{ dashboard?.totalCheckIns ?? 0 }}</span>
-            <span>连续 {{ dashboard?.currentStreakDays ?? 0 }} 天</span>
+            <span><strong>{{ dashboard?.totalGoals ?? 0 }}</strong>目标</span>
+            <span><strong>{{ dashboard?.totalCheckIns ?? 0 }}</strong>打卡</span>
+            <span><strong>{{ dashboard?.currentStreakDays ?? 0 }}</strong>连续天数</span>
           </div>
         </section>
 
@@ -664,8 +713,11 @@
             <el-icon><Lock /></el-icon>
           </div>
           <div class="security-row">
-            <span>密码</span>
-            <strong>已加密保存</strong>
+            <div>
+              <span>登录密码</span>
+              <strong>已加密保存</strong>
+              <small>建议定期更新密码，保护账号安全。</small>
+            </div>
             <el-button @click="openPasswordDialog">修改密码</el-button>
           </div>
         </section>
@@ -851,6 +903,7 @@ const activeGoalRows = computed(() => goalRows.value.filter((item) => item.goal.
 
 const todayGoals = computed(() => goalsForDate(new Date().toISOString().slice(0, 10)))
 const selectedChatFriend = computed(() => friends.value.find((friend) => friend.id === selectedChatFriendId.value))
+const selectedCircle = computed(() => circles.value.find((circle) => circle.id === selectedCircleId.value))
 const profileInitial = computed(() => (profile.value?.username || 'H').slice(0, 1).toUpperCase())
 
 onMounted(() => {
@@ -1280,6 +1333,10 @@ function friendshipLabel(status) {
 function formatTime(value) {
   if (!value) return ''
   return String(value).replace('T', ' ').slice(0, 16)
+}
+
+function userInitial(user) {
+  return (user?.username || 'H').slice(0, 1).toUpperCase()
 }
 
 function priorityLabel(priority) {
