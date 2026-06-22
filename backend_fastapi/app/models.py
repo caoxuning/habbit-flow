@@ -25,6 +25,7 @@ class Goal(Base):
     end_date: Mapped[object] = mapped_column(Date, nullable=False)
     cycle: Mapped[str] = mapped_column(String(20), nullable=False)
     daily_target_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    priority: Mapped[str] = mapped_column(String(20), nullable=False, default="NORMAL")
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="ACTIVE")
     create_time: Mapped[object] = mapped_column(DateTime, nullable=False)
     update_time: Mapped[object] = mapped_column(DateTime, nullable=False)

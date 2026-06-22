@@ -53,7 +53,15 @@ def ensure_user(db, username: str, email: str) -> User:
     return user
 
 
-def ensure_goal(db, user: User, name: str, goal_type: str, days_before: int, days_after: int) -> Goal:
+def ensure_goal(
+    db,
+    user: User,
+    name: str,
+    goal_type: str,
+    days_before: int,
+    days_after: int,
+    priority: str = "NORMAL",
+) -> Goal:
     goal = db.query(Goal).filter(Goal.user_id == user.id, Goal.name == name).first()
     today = date.today()
     start_date = today - timedelta(days=days_before)
@@ -67,6 +75,7 @@ def ensure_goal(db, user: User, name: str, goal_type: str, days_before: int, day
             end_date=end_date,
             cycle="DAILY",
             daily_target_count=1,
+            priority=priority,
             status="ACTIVE",
             create_time=current_time(),
             update_time=current_time(),
@@ -77,6 +86,7 @@ def ensure_goal(db, user: User, name: str, goal_type: str, days_before: int, day
     goal.end_date = end_date
     goal.cycle = "DAILY"
     goal.daily_target_count = 1
+    goal.priority = priority
     goal.status = "ACTIVE"
     goal.update_time = current_time()
     return goal
@@ -238,19 +248,19 @@ def seed_demo(db):
 
     goals = {
         "demo_admin": [
-            ensure_goal(db, users["demo_admin"], "每天背 30 个单词", "STUDY", 35, 30),
-            ensure_goal(db, users["demo_admin"], "每晚 20 分钟复盘", "REFLECTION", 20, 40),
+            ensure_goal(db, users["demo_admin"], "每天背 30 个单词", "STUDY", 35, 30, "IMPORTANT"),
+            ensure_goal(db, users["demo_admin"], "每晚 20 分钟复盘", "REFLECTION", 20, 40, "NORMAL"),
         ],
         "member1": [
-            ensure_goal(db, users["member1"], "早起 7 点前起床", "LIFE", 28, 30),
-            ensure_goal(db, users["member1"], "跑步 3 公里", "SPORT", 18, 30),
+            ensure_goal(db, users["member1"], "早起 7 点前起床", "LIFE", 28, 30, "NORMAL"),
+            ensure_goal(db, users["member1"], "跑步 3 公里", "SPORT", 18, 30, "IMPORTANT"),
         ],
         "member2": [
-            ensure_goal(db, users["member2"], "阅读专业书 20 页", "READING", 25, 30),
+            ensure_goal(db, users["member2"], "阅读专业书 20 页", "READING", 25, 30, "IMPORTANT"),
         ],
         "member3": [
-            ensure_goal(db, users["member3"], "完成课设开发任务", "PROJECT", 30, 30),
-            ensure_goal(db, users["member3"], "整理接口联调记录", "PROJECT", 12, 30),
+            ensure_goal(db, users["member3"], "完成课设开发任务", "PROJECT", 30, 30, "URGENT"),
+            ensure_goal(db, users["member3"], "整理接口联调记录", "PROJECT", 12, 30, "IMPORTANT"),
         ],
     }
 

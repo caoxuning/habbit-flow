@@ -26,6 +26,7 @@ def fill_goal(goal: Goal, request: GoalRequest):
     goal.end_date = request.endDate
     goal.cycle = request.cycle
     goal.daily_target_count = request.dailyTargetCount
+    goal.priority = request.priority or "NORMAL"
 
 
 @router.get("")

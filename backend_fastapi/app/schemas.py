@@ -26,6 +26,7 @@ class GoalRequest(BaseModel):
     endDate: date
     cycle: str = Field(min_length=1)
     dailyTargetCount: int = Field(ge=1)
+    priority: str | None = None
     status: str | None = None
 
 
@@ -73,6 +74,7 @@ def goal_dict(goal):
         "endDate": goal.end_date,
         "cycle": goal.cycle,
         "dailyTargetCount": goal.daily_target_count,
+        "priority": goal.priority,
         "status": goal.status,
         "createTime": goal.create_time,
         "updateTime": goal.update_time,

@@ -41,6 +41,10 @@
           <el-icon><DataAnalysis /></el-icon>
           <span>数据概览</span>
         </el-menu-item>
+        <el-menu-item index="calendar">
+          <el-icon><Calendar /></el-icon>
+          <span>任务日历</span>
+        </el-menu-item>
         <el-menu-item index="goals">
           <el-icon><Aim /></el-icon>
           <span>目标管理</span>
@@ -73,7 +77,6 @@
         </div>
         <div class="top-actions">
           <el-button :icon="Refresh" @click="loadAll">刷新</el-button>
-          <el-button type="primary" :icon="Plus" @click="openGoalDialog()">新建目标</el-button>
         </div>
       </header>
 
@@ -102,7 +105,65 @@
         </div>
       </div>
 
+      <div v-if="activeView === 'calendar'" class="calendar-layout">
+        <section class="panel calendar-panel">
+          <div class="panel-head calendar-head">
+            <div>
+              <h3>任务日历</h3>
+              <p>每天的目标会按照重要程度显示在日期下方。</p>
+            </div>
+            <div class="priority-legend">
+              <span><i class="priority-dot priority-normal"></i>普通</span>
+              <span><i class="priority-dot priority-important"></i>重要</span>
+              <span><i class="priority-dot priority-urgent"></i>紧急</span>
+            </div>
+          </div>
+          <el-calendar v-model="calendarDate">
+            <template #date-cell="{ data }">
+              <div class="calendar-cell">
+                <strong class="calendar-day">{{ dayNumber(data.day) }}</strong>
+                <div class="calendar-task-list">
+                  <button
+                    v-for="item in goalsForDate(data.day)"
+                    :key="`${data.day}-${item.goal.id}`"
+                    class="calendar-task"
+                    :class="priorityClass(item.goal.priority)"
+                    type="button"
+                    @click.stop="openGoalDialog(item.goal)"
+                  >
+                    <span>{{ item.goal.name }}</span>
+                    <small>{{ priorityLabel(item.goal.priority) }}</small>
+                  </button>
+                </div>
+              </div>
+            </template>
+          </el-calendar>
+        </section>
+
+        <section class="panel calendar-side">
+          <div class="panel-head">
+            <h3>今日任务</h3>
+            <el-icon><Calendar /></el-icon>
+          </div>
+          <article v-for="item in todayGoals" :key="item.goal.id" class="today-task" :class="priorityClass(item.goal.priority)">
+            <div>
+              <strong>{{ item.goal.name }}</strong>
+              <span>{{ item.goal.type }} · {{ cycleLabel(item.goal.cycle) }}</span>
+            </div>
+            <el-button size="small" type="primary" :icon="Check" @click="quickCheckIn(item.goal)">打卡</el-button>
+          </article>
+          <el-empty v-if="todayGoals.length === 0" description="今天暂无目标" />
+        </section>
+      </div>
+
       <div v-if="activeView === 'goals'" class="panel">
+        <div class="panel-head">
+          <div>
+            <h3>目标管理</h3>
+            <p class="panel-copy">在这里新建目标、设置周期和重要程度，保存后会自动出现在任务日历中。</p>
+          </div>
+          <el-button type="primary" :icon="Plus" @click="openGoalDialog()">新建目标</el-button>
+        </div>
         <el-table :data="goalRows" stripe>
           <el-table-column label="目标名称" min-width="180">
             <template #default="{ row }">
@@ -112,6 +173,11 @@
           </el-table-column>
           <el-table-column prop="goal.cycle" label="周期" width="110">
             <template #default="{ row }">{{ cycleLabel(row.goal.cycle) }}</template>
+          </el-table-column>
+          <el-table-column label="重要程度" width="110">
+            <template #default="{ row }">
+              <el-tag :type="priorityTagType(row.goal.priority)">{{ priorityLabel(row.goal.priority) }}</el-tag>
+            </template>
           </el-table-column>
           <el-table-column label="日期" min-width="180">
             <template #default="{ row }">{{ row.goal.startDate }} 至 {{ row.goal.endDate }}</template>
@@ -452,6 +518,9 @@
         <el-form-item label="目标类型">
           <el-input v-model="goalForm.type" placeholder="运动、学习、阅读" />
         </el-form-item>
+        <el-form-item label="重要程度">
+          <el-segmented v-model="goalForm.priority" :options="priorityOptions" />
+        </el-form-item>
         <div class="form-grid">
           <el-form-item label="开始日期">
             <el-date-picker v-model="goalForm.startDate" value-format="YYYY-MM-DD" type="date" class="full-button" />
@@ -509,6 +578,7 @@ const circlePosts = ref([])
 const feedPosts = ref([])
 const monthlyChartRef = ref()
 const rateChartRef = ref()
+const calendarDate = ref(new Date())
 let monthlyChart
 let rateChart
 
@@ -531,9 +601,15 @@ const statusOptions = [
   { label: '已暂停', value: 'PAUSED' },
   { label: '已完成', value: 'DONE' }
 ]
+const priorityOptions = [
+  { label: '普通', value: 'NORMAL' },
+  { label: '重要', value: 'IMPORTANT' },
+  { label: '紧急', value: 'URGENT' }
+]
 
 const viewTitle = computed(() => ({
   dashboard: '数据概览',
+  calendar: '任务日历',
   goals: '目标管理',
   checkins: '打卡管理',
   badges: '勋章奖励',
@@ -543,6 +619,7 @@ const viewTitle = computed(() => ({
 
 const viewSubtitle = computed(() => ({
   dashboard: '查看完成次数、连续打卡、完成率与月度成长趋势。',
+  calendar: '按日期查看每天需要推进的目标，并用颜色区分任务紧急程度。',
   goals: '创建目标、设置周期、维护每日目标次数。',
   checkins: '提交每日打卡，处理历史补卡并查看记录。',
   badges: '系统根据坚持情况自动发放奖励。',
@@ -557,6 +634,8 @@ const metrics = computed(() => [
   { label: '连续打卡天数', value: dashboard.value?.currentStreakDays ?? 0 },
   { label: '平均完成率', value: `${dashboard.value?.averageCompletionRate ?? 0}%` }
 ])
+
+const todayGoals = computed(() => goalsForDate(new Date().toISOString().slice(0, 10)))
 
 onMounted(() => {
   if (token.value) {
@@ -827,6 +906,37 @@ function friendshipLabel(status) {
   return { NONE: '未添加', PENDING: '待处理', ACCEPTED: '已通过', REJECTED: '已拒绝' }[status] || status
 }
 
+function priorityLabel(priority) {
+  return { NORMAL: '普通', IMPORTANT: '重要', URGENT: '紧急' }[priority || 'NORMAL'] || '普通'
+}
+
+function priorityClass(priority) {
+  return {
+    NORMAL: 'priority-normal',
+    IMPORTANT: 'priority-important',
+    URGENT: 'priority-urgent'
+  }[priority || 'NORMAL']
+}
+
+function priorityTagType(priority) {
+  return { NORMAL: 'info', IMPORTANT: 'warning', URGENT: 'danger' }[priority || 'NORMAL'] || 'info'
+}
+
+function dayNumber(day) {
+  return Number(day.slice(-2))
+}
+
+function goalsForDate(day) {
+  return goalRows.value
+    .filter((item) => item.goal.status === 'ACTIVE')
+    .filter((item) => item.goal.startDate <= day && item.goal.endDate >= day)
+    .sort((left, right) => priorityRank(right.goal.priority) - priorityRank(left.goal.priority))
+}
+
+function priorityRank(priority) {
+  return { NORMAL: 1, IMPORTANT: 2, URGENT: 3 }[priority || 'NORMAL'] || 1
+}
+
 function normalizeList(data) {
   return Array.isArray(data) ? data : (data?.list || [])
 }
@@ -843,6 +953,7 @@ function emptyGoal() {
     endDate: end.toISOString().slice(0, 10),
     cycle: 'DAILY',
     dailyTargetCount: 1,
+    priority: 'NORMAL',
     status: 'ACTIVE'
   }
 }
