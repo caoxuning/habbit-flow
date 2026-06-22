@@ -323,6 +323,44 @@ h1 {
   line-height: 1.7;
 }
 
+.post-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.post-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.comment-box {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e6edf5;
+}
+
+.comment-list {
+  display: grid;
+  gap: 8px;
+}
+
+.comment-item {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 8px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: #f7f9fc;
+}
+
+.comment-item span {
+  color: #344054;
+  line-height: 1.5;
+}
+
 @media (max-width: 980px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -361,7 +399,8 @@ h1 {
 
   .inline-form,
   .record-tools,
-  .mini-card.selectable {
+  .mini-card.selectable,
+  .comment-item {
     grid-template-columns: 1fr;
   }
 }

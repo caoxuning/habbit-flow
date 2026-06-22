@@ -104,3 +104,22 @@ class CirclePost(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
     content: Mapped[str] = mapped_column(String(1000), nullable=False)
     create_time: Mapped[object] = mapped_column(DateTime, nullable=False)
+
+
+class PostLike(Base):
+    __tablename__ = "post_like"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    post_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("circle_post.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
+    create_time: Mapped[object] = mapped_column(DateTime, nullable=False)
+
+
+class PostComment(Base):
+    __tablename__ = "post_comment"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    post_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("circle_post.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    create_time: Mapped[object] = mapped_column(DateTime, nullable=False)

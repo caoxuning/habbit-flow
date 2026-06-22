@@ -50,5 +50,9 @@ export const socialApi = {
   leaveCircle: (id) => http.delete(`/social/circles/${id}/leave`),
   posts: (circleId) => http.get(`/social/circles/${circleId}/posts`),
   publishPost: (circleId, data) => http.post(`/social/circles/${circleId}/posts`, data),
+  likePost: (postId) => http.post(`/social/posts/${postId}/like`),
+  unlikePost: (postId) => http.delete(`/social/posts/${postId}/like`),
+  comments: (postId) => http.get(`/social/posts/${postId}/comments`),
+  commentPost: (postId, data) => http.post(`/social/posts/${postId}/comments`, data),
   feed: () => http.get('/social/feed')
 }
