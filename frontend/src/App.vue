@@ -41,6 +41,10 @@
           <el-icon><DataAnalysis /></el-icon>
           <span>数据概览</span>
         </el-menu-item>
+        <el-menu-item index="calendar">
+          <el-icon><Calendar /></el-icon>
+          <span>任务日历</span>
+        </el-menu-item>
         <el-menu-item index="goals">
           <el-icon><Aim /></el-icon>
           <span>目标管理</span>
@@ -78,7 +82,6 @@
         <div class="top-actions">
           <el-button v-if="activeView === 'checkins'" :icon="Download" @click="exportCheckIns">导出打卡记录</el-button>
           <el-button :icon="Refresh" @click="loadAll">刷新</el-button>
-          <el-button type="primary" :icon="Plus" @click="openGoalDialog()">新建目标</el-button>
         </div>
       </header>
 
@@ -129,7 +132,63 @@
         </section>
       </div>
 
+      <div v-if="activeView === 'calendar'" class="calendar-layout">
+        <section class="panel calendar-panel">
+          <div class="panel-head calendar-head">
+            <div>
+              <h3>任务日历</h3>
+              <p>每天的目标会按照重要程度显示在日期下方。</p>
+            </div>
+            <div class="priority-legend">
+              <span><i class="priority-dot priority-normal"></i>普通</span>
+              <span><i class="priority-dot priority-important"></i>重要</span>
+              <span><i class="priority-dot priority-urgent"></i>紧急</span>
+            </div>
+          </div>
+          <el-calendar v-model="calendarDate">
+            <template #date-cell="{ data }">
+              <div class="calendar-cell">
+                <strong class="calendar-day">{{ dayNumber(data.day) }}</strong>
+                <div class="calendar-task-list">
+                  <article
+                    v-for="item in goalsForDate(data.day)"
+                    :key="`${data.day}-${item.goal.id}`"
+                    class="calendar-task"
+                    :class="priorityClass(item.goal.priority)"
+                  >
+                    <span>{{ item.goal.name }}</span>
+                    <small>{{ priorityLabel(item.goal.priority) }}</small>
+                  </article>
+                </div>
+              </div>
+            </template>
+          </el-calendar>
+        </section>
+
+        <section class="panel calendar-side">
+          <div class="panel-head">
+            <h3>今日任务</h3>
+            <el-icon><Calendar /></el-icon>
+          </div>
+          <article v-for="item in todayGoals" :key="item.goal.id" class="today-task" :class="priorityClass(item.goal.priority)">
+            <div>
+              <strong>{{ item.goal.name }}</strong>
+              <span>{{ item.goal.type }} · {{ cycleLabel(item.goal.cycle) }}</span>
+            </div>
+            <el-button size="small" type="primary" :icon="Check" @click="quickCheckIn(item.goal)">打卡</el-button>
+          </article>
+          <el-empty v-if="todayGoals.length === 0" description="今天暂无目标" />
+        </section>
+      </div>
+
       <div v-if="activeView === 'goals'" class="panel">
+        <div class="panel-head">
+          <div>
+            <h3>目标管理</h3>
+            <p class="panel-copy">在这里新建目标、设置周期和重要程度，保存后会自动出现在任务日历中。</p>
+          </div>
+          <el-button type="primary" :icon="Plus" @click="openGoalDialog()">新建目标</el-button>
+        </div>
         <el-table :data="goalRows" stripe>
           <el-table-column label="目标名称" min-width="180">
             <template #default="{ row }">
@@ -139,6 +198,11 @@
           </el-table-column>
           <el-table-column prop="goal.cycle" label="周期" width="110">
             <template #default="{ row }">{{ cycleLabel(row.goal.cycle) }}</template>
+          </el-table-column>
+          <el-table-column label="重要程度" width="110">
+            <template #default="{ row }">
+              <el-tag :type="priorityTagType(row.goal.priority)">{{ priorityLabel(row.goal.priority) }}</el-tag>
+            </template>
           </el-table-column>
           <el-table-column label="日期" min-width="180">
             <template #default="{ row }">{{ row.goal.startDate }} 至 {{ row.goal.endDate }}</template>
@@ -300,16 +364,32 @@
       </div>
 
       <div v-if="activeView === 'social'" class="social-space">
-        <el-tabs v-model="socialTab">
+        <section class="social-hero">
+          <div>
+            <h3>社交圈子</h3>
+            <p>和好友互相提醒，在圈子里记录运动、英语和阅读进展。</p>
+          </div>
+          <div class="social-stats">
+            <span><strong>{{ friends.length }}</strong>好友</span>
+            <span><strong>{{ circles.length }}</strong>圈子</span>
+            <span><strong>{{ feedPosts.length }}</strong>动态</span>
+          </div>
+        </section>
+
+        <el-tabs v-model="socialTab" class="social-tabs">
           <el-tab-pane label="好友管理" name="friends" />
+          <el-tab-pane label="好友聊天" name="chat" />
           <el-tab-pane label="圈子广场" name="circles" />
           <el-tab-pane label="社区动态" name="feed" />
         </el-tabs>
 
-        <div v-if="socialTab === 'friends'" class="two-column">
-          <section class="panel">
+        <div v-if="socialTab === 'friends'" class="friends-dashboard">
+          <section class="panel friend-search-panel">
             <div class="panel-head">
-              <h3>用户搜索</h3>
+              <div>
+                <h3>发现好友</h3>
+                <p class="panel-copy">搜索同学账号，发送好友申请后即可聊天。</p>
+              </div>
               <el-icon><User /></el-icon>
             </div>
             <div class="inline-form">
@@ -334,9 +414,12 @@
             </el-table>
           </section>
 
-          <section class="panel">
+          <section class="panel friend-request-panel">
             <div class="panel-head">
-              <h3>好友申请</h3>
+              <div>
+                <h3>好友申请</h3>
+                <p class="panel-copy">处理收到的好友请求。</p>
+              </div>
               <el-icon><Bell /></el-icon>
             </div>
             <el-table :data="friendRequests" height="280" stripe>
@@ -358,43 +441,128 @@
             </el-table>
           </section>
 
-          <section class="panel social-wide">
+          <section class="panel social-wide friend-directory">
             <div class="panel-head">
-              <h3>好友列表</h3>
+              <div>
+                <h3>好友列表</h3>
+                <p class="panel-copy">点击聊天进入会话。</p>
+              </div>
               <el-icon><User /></el-icon>
             </div>
             <div class="friend-list">
-              <article v-for="friend in friends" :key="friend.id" class="mini-card">
-                <strong>{{ friend.username }}</strong>
-                <span>{{ friend.email || '未填写邮箱' }}</span>
+              <article v-for="friend in friends" :key="friend.id" class="friend-card">
+                <div class="avatar-sm">{{ userInitial(friend) }}</div>
+                <div>
+                  <strong>{{ friend.username }}</strong>
+                  <span>{{ friend.email || '未填写邮箱' }}</span>
+                </div>
+                <el-button size="small" type="primary" @click="openChat(friend)">聊天</el-button>
               </article>
               <el-empty v-if="friends.length === 0" description="搜索用户并发送好友申请" />
             </div>
           </section>
         </div>
 
-        <div v-if="socialTab === 'circles'" class="two-column">
-          <section class="panel">
+        <div v-if="socialTab === 'chat'" class="chat-layout">
+          <section class="chat-friends">
+            <div class="chat-list-head">
+              <div>
+                <h3>消息</h3>
+                <span>{{ friends.length }} 位好友</span>
+              </div>
+              <el-button text :icon="Refresh" @click="loadSocialData" />
+            </div>
+            <button
+              v-for="friend in friends"
+              :key="friend.id"
+              class="chat-friend"
+              :class="{ active: selectedChatFriendId === friend.id }"
+              type="button"
+              @click="openChat(friend)"
+            >
+              <div class="chat-avatar">{{ userInitial(friend) }}</div>
+              <div class="chat-friend-main">
+                <strong>{{ friend.username }}</strong>
+                <span>{{ friend.email || '点击打开会话' }}</span>
+              </div>
+              <small>好友</small>
+            </button>
+            <el-empty v-if="friends.length === 0" description="添加好友后即可聊天" />
+          </section>
+
+          <section class="chat-panel">
+            <div class="chat-thread-head">
+              <div class="avatar-sm">{{ selectedChatFriend ? userInitial(selectedChatFriend) : 'H' }}</div>
+              <div>
+                <h3>{{ selectedChatFriend ? selectedChatFriend.username : '选择好友开始聊天' }}</h3>
+                <span>{{ selectedChatFriend ? '好友 · 私信' : '从左侧选择一个会话' }}</span>
+              </div>
+              <el-button :icon="Refresh" :disabled="!selectedChatFriendId" @click="loadMessages(selectedChatFriendId)">刷新</el-button>
+            </div>
+            <div class="message-list">
+              <article
+                v-for="message in chatMessages"
+                :key="message.id"
+                class="message-bubble"
+                :class="{ mine: message.sender.id === profile?.id }"
+              >
+                <strong>{{ message.sender.id === profile?.id ? '我' : message.sender.username }}</strong>
+                <p>{{ message.content }}</p>
+                <small>{{ formatTime(message.createTime) }}</small>
+              </article>
+              <el-empty v-if="selectedChatFriendId && chatMessages.length === 0" description="还没有聊天记录" />
+              <el-empty v-if="!selectedChatFriendId" description="从左侧选择一个好友" />
+            </div>
+            <div class="message-composer">
+              <el-input
+                v-model="messageForm.content"
+                placeholder="输入消息，按 Enter 发送"
+                :disabled="!selectedChatFriendId"
+                @keyup.enter="sendMessage"
+              />
+              <el-button type="primary" :disabled="!selectedChatFriendId" @click="sendMessage">发送</el-button>
+            </div>
+          </section>
+        </div>
+
+        <div v-if="socialTab === 'circles'" class="circle-workspace">
+          <section class="panel circle-sidebar">
             <div class="panel-head">
-              <h3>圈子列表</h3>
+              <div>
+                <h3>圈子广场</h3>
+                <p class="panel-copy">选择圈子查看成员动态。</p>
+              </div>
               <el-icon><Medal /></el-icon>
             </div>
             <div class="circle-list">
-              <article v-for="circle in circles" :key="circle.id" class="mini-card selectable" :class="{ active: selectedCircleId === circle.id }" @click="selectCircle(circle)">
+              <article v-for="circle in circles" :key="circle.id" class="circle-card" :class="{ active: selectedCircleId === circle.id }" @click="selectCircle(circle)">
+                <div class="circle-icon">{{ circle.icon || 'TAG' }}</div>
                 <div>
                   <strong>{{ circle.name }}</strong>
                   <span>{{ circle.description }}</span>
                 </div>
-                <small>{{ circle.memberCount }} 人</small>
                 <el-button size="small" :type="circle.joined ? 'warning' : 'primary'" @click.stop="toggleCircle(circle)">
                   {{ circle.joined ? '退出' : '加入' }}
                 </el-button>
+                <small>{{ circle.memberCount }} 人</small>
               </article>
             </div>
           </section>
 
-          <section class="panel">
+          <section class="panel circle-composer">
             <div class="panel-head">
+              <div>
+                <h3>发布动态</h3>
+                <p class="panel-copy">{{ selectedCircle ? `发布到 ${selectedCircle.name}` : '先选择一个圈子' }}</p>
+              </div>
+              <el-icon><Edit /></el-icon>
+            </div>
+            <el-input v-model="postForm.content" type="textarea" :rows="4" placeholder="分享今天的打卡进展，例如跑步、背单词、阅读笔记" />
+            <el-button class="post-button" type="primary" :icon="Edit" :disabled="!selectedCircleId" @click="publishPost">发布动态</el-button>
+
+            <el-divider />
+
+            <div class="panel-head compact">
               <h3>创建圈子</h3>
               <el-icon><Plus /></el-icon>
             </div>
@@ -410,25 +578,20 @@
               </el-form-item>
               <el-button type="primary" :icon="Plus" @click="createCircle">创建圈子</el-button>
             </el-form>
-
-            <el-divider />
-
-            <div class="panel-head compact">
-              <h3>圈内发帖</h3>
-              <el-icon><Edit /></el-icon>
-            </div>
-            <el-input v-model="postForm.content" type="textarea" :rows="3" placeholder="分享今天的打卡进展" />
-            <el-button class="post-button" type="primary" :icon="Edit" :disabled="!selectedCircleId" @click="publishPost">发布</el-button>
           </section>
 
-          <section class="panel social-wide">
+          <section class="panel social-wide circle-feed-panel">
             <div class="panel-head">
-              <h3>圈子帖子</h3>
+              <div>
+                <h3>{{ selectedCircle ? selectedCircle.name : '圈子帖子' }}</h3>
+                <p class="panel-copy">{{ selectedCircle?.description || '选择一个圈子查看动态。' }}</p>
+              </div>
               <el-icon><Calendar /></el-icon>
             </div>
             <div class="post-list">
               <article v-for="post in circlePosts" :key="post.id" class="post-item">
                 <div class="post-meta">
+                  <div class="avatar-sm">{{ userInitial(post.author) }}</div>
                   <strong>{{ post.author.username }} · {{ post.circleName }}</strong>
                   <small>{{ post.createTime }}</small>
                 </div>
@@ -460,14 +623,18 @@
           </section>
         </div>
 
-        <section v-if="socialTab === 'feed'" class="panel">
+        <section v-if="socialTab === 'feed'" class="panel feed-panel">
           <div class="panel-head">
-            <h3>我的圈子动态</h3>
+            <div>
+              <h3>我的圈子动态</h3>
+              <p class="panel-copy">你加入的圈子动态会汇总在这里。</p>
+            </div>
             <el-icon><Calendar /></el-icon>
           </div>
           <div class="post-list">
             <article v-for="post in feedPosts" :key="post.id" class="post-item">
               <div class="post-meta">
+                <div class="avatar-sm">{{ userInitial(post.author) }}</div>
                 <strong>{{ post.author.username }} · {{ post.circleName }}</strong>
                 <small>{{ post.createTime }}</small>
               </div>
@@ -499,10 +666,28 @@
         </section>
       </div>
 
-      <div v-if="activeView === 'profile'" class="two-column narrow">
-        <section class="panel">
+      <div v-if="activeView === 'profile'" class="profile-layout">
+        <section class="panel profile-card">
+          <div class="profile-cover">
+            <div class="profile-avatar">{{ profileInitial }}</div>
+            <div>
+              <h3>{{ profile?.username }}</h3>
+              <p>{{ profile?.email || '暂未填写邮箱' }}</p>
+            </div>
+          </div>
+          <div class="profile-stats">
+            <span><strong>{{ dashboard?.totalGoals ?? 0 }}</strong>目标</span>
+            <span><strong>{{ dashboard?.totalCheckIns ?? 0 }}</strong>打卡</span>
+            <span><strong>{{ dashboard?.currentStreakDays ?? 0 }}</strong>连续天数</span>
+          </div>
+        </section>
+
+        <section class="panel profile-settings">
           <div class="panel-head">
-            <h3>个人信息维护</h3>
+            <div>
+              <h3>账号资料</h3>
+              <p class="panel-copy">基础资料可以随时维护，安全操作会单独确认。</p>
+            </div>
             <el-icon><User /></el-icon>
           </div>
           <el-form :model="profileForm" label-position="top">
@@ -518,23 +703,23 @@
             <el-button type="primary" @click="saveProfile">保存资料</el-button>
           </el-form>
         </section>
-        <section class="panel">
+
+        <section class="panel security-card">
           <div class="panel-head">
-            <h3>修改密码</h3>
+            <div>
+              <h3>账号安全</h3>
+              <p class="panel-copy">修改密码属于敏感操作，进入弹窗后再填写原密码和新密码。</p>
+            </div>
             <el-icon><Lock /></el-icon>
           </div>
-          <el-form :model="passwordForm" label-position="top">
-            <el-form-item label="原密码">
-              <el-input v-model="passwordForm.oldPassword" type="password" show-password />
-            </el-form-item>
-            <el-form-item label="新密码">
-              <el-input v-model="passwordForm.newPassword" type="password" show-password />
-            </el-form-item>
-            <el-form-item label="确认新密码">
-              <el-input v-model="passwordForm.confirmPassword" type="password" show-password />
-            </el-form-item>
-            <el-button @click="changePassword">更新密码</el-button>
-          </el-form>
+          <div class="security-row">
+            <div>
+              <span>登录密码</span>
+              <strong>已加密保存</strong>
+              <small>建议定期更新密码，保护账号安全。</small>
+            </div>
+            <el-button @click="openPasswordDialog">修改密码</el-button>
+          </div>
         </section>
       </div>
     </main>
@@ -548,6 +733,9 @@
           <el-select v-model="goalForm.type" class="full-button" filterable allow-create default-first-option placeholder="选择或输入类型">
             <el-option v-for="item in goalTypeOptions" :key="item" :label="item" :value="item" />
           </el-select>
+        </el-form-item>
+        <el-form-item label="重要程度">
+          <el-segmented v-model="goalForm.priority" :options="priorityOptions" />
         </el-form-item>
         <div class="form-grid">
           <el-form-item label="开始日期" prop="startDate">
@@ -578,13 +766,69 @@
         <el-button type="primary" @click="saveGoal">保存</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="passwordDialogVisible" title="修改密码" width="420px">
+      <el-form :model="passwordForm" label-position="top">
+        <el-form-item label="原密码">
+          <el-input v-model="passwordForm.oldPassword" type="password" show-password />
+        </el-form-item>
+        <el-form-item label="新密码">
+          <el-input v-model="passwordForm.newPassword" type="password" show-password />
+        </el-form-item>
+        <el-form-item label="确认新密码">
+          <el-input v-model="passwordForm.confirmPassword" type="password" show-password />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="passwordDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="changePassword">更新密码</el-button>
+      </template>
+    </el-dialog>
+
+    <transition name="inspiration-fade">
+      <div v-if="inspirationVisible" class="inspiration-overlay" @click.self="closeInspiration">
+        <section class="inspiration-card" role="dialog" aria-modal="true" aria-labelledby="inspiration-title">
+          <div class="confetti-field" aria-hidden="true">
+            <i
+              v-for="piece in inspirationConfetti"
+              :key="piece.id"
+              :style="{
+                '--x': piece.x,
+                '--delay': piece.delay,
+                '--duration': piece.duration,
+                '--rotate': piece.rotate,
+                '--rotate-end': piece.rotateEnd,
+                background: piece.color
+              }"
+            ></i>
+          </div>
+          <button class="inspiration-close" type="button" aria-label="关闭" @click="closeInspiration">x</button>
+          <div class="success-ring">
+            <el-icon><Check /></el-icon>
+          </div>
+          <p class="inspiration-kicker">打卡完成</p>
+          <h3 id="inspiration-title">今天也认真完成了一步</h3>
+          <blockquote>{{ inspirationCard.content }}</blockquote>
+          <p v-if="inspirationCard.cn" class="inspiration-cn">{{ inspirationCard.cn }}</p>
+          <p v-if="inspirationCard.example" class="inspiration-example">例句：{{ inspirationCard.example }}</p>
+          <div v-if="inspirationCard.peerTips.length > 0" class="peer-tip-list">
+            <strong>同路人寄语</strong>
+            <article v-for="tip in inspirationCard.peerTips" :key="`${tip.goalName}-${tip.remark}`">
+              <span>「{{ tip.remark }}」</span>
+              <small>{{ tip.goalName }}</small>
+            </article>
+          </div>
+          <el-button type="primary" class="inspiration-action" @click="closeInspiration">继续坚持</el-button>
+        </section>
+      </div>
+    </transition>
   </section>
 </template>
 
 <script setup>
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import * as echarts from 'echarts'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { Aim, Bell, Calendar, Check, DataAnalysis, Download, Edit, Lock, Medal, Plus, Refresh, SwitchButton, Timer, User } from '@element-plus/icons-vue'
 import { authApi, badgeApi, checkInApi, exportApi, goalApi, socialApi, statsApi, userApi } from './api'
 
@@ -607,6 +851,7 @@ const circlePosts = ref([])
 const feedPosts = ref([])
 const monthlyChartRef = ref()
 const rateChartRef = ref()
+const calendarDate = ref(new Date())
 let monthlyChart
 let rateChart
 
@@ -620,8 +865,23 @@ const timelineList = ref([])
 const timelineDays = ref(30)
 const profileForm = reactive({ username: '', email: '' })
 const passwordForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
+const passwordDialogVisible = ref(false)
+const inspirationVisible = ref(false)
+const inspirationCard = reactive({ content: '', cn: '', example: '', peerTips: [] })
+const inspirationConfetti = Array.from({ length: 18 }, (_, index) => ({
+  id: index,
+  x: `${8 + ((index * 17) % 84)}%`,
+  delay: `${(index % 6) * 0.08}s`,
+  duration: `${1.4 + (index % 5) * 0.12}s`,
+  rotate: `${(index * 47) % 180}deg`,
+  rotateEnd: `${220 + ((index * 53) % 220)}deg`,
+  color: ['#2f80ed', '#13a46f', '#f59f00', '#e03131', '#8b5cf6'][index % 5]
+}))
 const userKeyword = ref('')
 const socialTab = ref('friends')
+const selectedChatFriendId = ref(null)
+const chatMessages = ref([])
+const messageForm = reactive({ content: '' })
 const selectedCircleId = ref(null)
 const circleForm = reactive({ name: '', description: '', icon: '' })
 const postForm = reactive({ content: '' })
@@ -632,6 +892,11 @@ const statusOptions = [
   { label: '进行中', value: 'ACTIVE' },
   { label: '已暂停', value: 'PAUSED' },
   { label: '已完成', value: 'DONE' }
+]
+const priorityOptions = [
+  { label: '普通', value: 'NORMAL' },
+  { label: '重要', value: 'IMPORTANT' },
+  { label: '紧急', value: 'URGENT' }
 ]
 const goalTypeOptions = ['学习', '运动', '阅读', '英语', '早睡', '健身']
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -656,6 +921,7 @@ const goalRules = {
 
 const viewTitle = computed(() => ({
   dashboard: '数据概览',
+  calendar: '任务日历',
   goals: '目标管理',
   checkins: '打卡管理',
   timeline: '成长日志',
@@ -666,6 +932,7 @@ const viewTitle = computed(() => ({
 
 const viewSubtitle = computed(() => ({
   dashboard: '查看完成次数、连续打卡、完成率与月度成长趋势。',
+  calendar: '按日期查看每天需要推进的目标，并用颜色区分任务紧急程度。',
   goals: '创建目标、设置周期、维护每日目标次数。',
   checkins: '提交每日打卡，处理历史补卡并查看记录。',
   timeline: '按时间线回顾你的每一次坚持与成长。',
@@ -683,6 +950,11 @@ const metrics = computed(() => [
 ])
 const activeGoalRows = computed(() => goalRows.value.filter((item) => item.goal.status === 'ACTIVE'))
 
+const todayGoals = computed(() => goalsForDate(new Date().toISOString().slice(0, 10)))
+const selectedChatFriend = computed(() => friends.value.find((friend) => friend.id === selectedChatFriendId.value))
+const selectedCircle = computed(() => circles.value.find((circle) => circle.id === selectedCircleId.value))
+const profileInitial = computed(() => (profile.value?.username || 'H').slice(0, 1).toUpperCase())
+
 onMounted(() => {
   if (token.value) {
     loadAll()
@@ -695,6 +967,12 @@ watch(activeView, () => {
   }
   if (activeView.value === 'social') {
     loadSocialData()
+  }
+})
+
+watch(socialTab, () => {
+  if (socialTab.value === 'chat') {
+    prepareChat()
   }
 })
 
@@ -750,6 +1028,15 @@ async function loadSocialData() {
   friendRequests.value = requestsData
   circles.value = circlesData
   feedPosts.value = normalizeList(feedData)
+  if (!selectedChatFriendId.value && friends.value.length > 0) {
+    selectedChatFriendId.value = friends.value[0].id
+  }
+  if (selectedChatFriendId.value && friends.value.some((friend) => friend.id === selectedChatFriendId.value)) {
+    await loadMessages(selectedChatFriendId.value)
+  } else {
+    selectedChatFriendId.value = null
+    chatMessages.value = []
+  }
   if (!selectedCircleId.value && circles.value.length > 0) {
     selectedCircleId.value = circles.value[0].id
   }
@@ -810,19 +1097,23 @@ async function deleteGoal(id) {
 function showInspiration(data) {
   if (data?.inspiration) {
     const ins = data.inspiration
-    let msg = `<div style="margin-bottom: 12px;"><strong>${ins.content}</strong></div>`
-    if (ins.cn) msg += `<div style="color: #909399; margin-bottom: 12px;">${ins.cn}</div>`
-    if (ins.example) msg += `<div style="color: #606266; font-style: italic; margin-bottom: 12px;">例句：${ins.example}</div>`
-    if (data.peerTips?.length > 0) {
-      msg += `<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #ebeef5;"><strong>同路人寄语：</strong></div>`
-      data.peerTips.forEach(t => {
-        msg += `<div style="margin-top: 6px; color: #606266;">「${t.remark}」<br><small style="color: #909399;">—— ${t.goalName}</small></div>`
-      })
-    }
-    ElMessageBox.alert(msg, '🎉 打卡成功 · 精选内容', { dangerouslyUseHTMLString: true, confirmButtonText: '继续努力' })
+    Object.assign(inspirationCard, {
+      content: ins.content || '坚持本身就是最好的证明。',
+      cn: ins.cn || '',
+      example: ins.example || '',
+      peerTips: data.peerTips || []
+    })
+    inspirationVisible.value = false
+    nextTick(() => {
+      inspirationVisible.value = true
+    })
   } else {
     ElMessage.success('打卡成功')
   }
+}
+
+function closeInspiration() {
+  inspirationVisible.value = false
 }
 
 async function quickCheckIn(goal) {
@@ -886,7 +1177,13 @@ async function changePassword() {
   }
   await userApi.changePassword(passwordForm)
   Object.assign(passwordForm, { oldPassword: '', newPassword: '', confirmPassword: '' })
+  passwordDialogVisible.value = false
   ElMessage.success('密码已更新')
+}
+
+function openPasswordDialog() {
+  Object.assign(passwordForm, { oldPassword: '', newPassword: '', confirmPassword: '' })
+  passwordDialogVisible.value = true
 }
 
 async function searchUsers() {
@@ -913,6 +1210,37 @@ async function handleFriendRequest(id, accepted) {
     ElMessage.success('已拒绝好友申请')
   }
   await loadSocialData()
+}
+
+async function prepareChat() {
+  if (friends.value.length === 0) {
+    await loadSocialData()
+  }
+  if (!selectedChatFriendId.value && friends.value.length > 0) {
+    selectedChatFriendId.value = friends.value[0].id
+  }
+  if (selectedChatFriendId.value) {
+    await loadMessages(selectedChatFriendId.value)
+  }
+}
+
+async function openChat(friend) {
+  selectedChatFriendId.value = friend.id
+  socialTab.value = 'chat'
+  await loadMessages(friend.id)
+}
+
+async function loadMessages(friendId) {
+  if (!friendId) return
+  chatMessages.value = await socialApi.messages(friendId)
+}
+
+async function sendMessage() {
+  const content = messageForm.content.trim()
+  if (!selectedChatFriendId.value || !content) return
+  await socialApi.sendMessage(selectedChatFriendId.value, { content })
+  messageForm.content = ''
+  await loadMessages(selectedChatFriendId.value)
 }
 
 async function createCircle() {
@@ -1055,22 +1383,78 @@ function friendshipLabel(status) {
   return { NONE: '未添加', PENDING: '待处理', ACCEPTED: '已通过', REJECTED: '已拒绝' }[status] || status
 }
 
+function formatTime(value) {
+  if (!value) return ''
+  return String(value).replace('T', ' ').slice(0, 16)
+}
+
+function userInitial(user) {
+  return (user?.username || 'H').slice(0, 1).toUpperCase()
+}
+
+function priorityLabel(priority) {
+  return { NORMAL: '普通', IMPORTANT: '重要', URGENT: '紧急' }[priority || 'NORMAL'] || '普通'
+}
+
+function priorityClass(priority) {
+  return {
+    NORMAL: 'priority-normal',
+    IMPORTANT: 'priority-important',
+    URGENT: 'priority-urgent'
+  }[priority || 'NORMAL']
+}
+
+function priorityTagType(priority) {
+  return { NORMAL: 'info', IMPORTANT: 'warning', URGENT: 'danger' }[priority || 'NORMAL'] || 'info'
+}
+
+function dayNumber(day) {
+  return Number(day.slice(-2))
+}
+
+function goalsForDate(day) {
+  return goalRows.value
+    .filter((item) => item.goal.status === 'ACTIVE')
+    .filter((item) => item.goal.startDate <= day && item.goal.endDate >= day)
+    .filter((item) => goalOccursOnDate(item.goal, day))
+    .sort((left, right) => priorityRank(right.goal.priority) - priorityRank(left.goal.priority))
+}
+
+function goalOccursOnDate(goal, day) {
+  const current = parseDate(day)
+  const start = parseDate(goal.startDate)
+  if (!current || !start) return false
+  const dayDiff = Math.floor((current - start) / 86400000)
+  if (goal.cycle === 'WEEKLY') return dayDiff % 7 === 0
+  if (goal.cycle === 'MONTHLY') return current.getDate() === start.getDate()
+  return true
+}
+
+function parseDate(value) {
+  const date = new Date(`${value}T00:00:00`)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function priorityRank(priority) {
+  return { NORMAL: 1, IMPORTANT: 2, URGENT: 3 }[priority || 'NORMAL'] || 1
+}
+
 function normalizeList(data) {
   return Array.isArray(data) ? data : (data?.list || [])
 }
 
 function emptyGoal() {
   const today = new Date()
-  const end = new Date()
-  end.setMonth(end.getMonth() + 1)
+  const todayText = today.toISOString().slice(0, 10)
   return {
     id: null,
     name: '',
     type: '',
-    startDate: today.toISOString().slice(0, 10),
-    endDate: end.toISOString().slice(0, 10),
+    startDate: todayText,
+    endDate: todayText,
     cycle: 'DAILY',
     dailyTargetCount: 1,
+    priority: 'NORMAL',
     status: 'ACTIVE'
   }
 }
