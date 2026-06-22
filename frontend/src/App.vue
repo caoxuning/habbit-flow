@@ -784,13 +784,51 @@
         <el-button type="primary" @click="changePassword">更新密码</el-button>
       </template>
     </el-dialog>
+
+    <transition name="inspiration-fade">
+      <div v-if="inspirationVisible" class="inspiration-overlay" @click.self="closeInspiration">
+        <section class="inspiration-card" role="dialog" aria-modal="true" aria-labelledby="inspiration-title">
+          <div class="confetti-field" aria-hidden="true">
+            <i
+              v-for="piece in inspirationConfetti"
+              :key="piece.id"
+              :style="{
+                '--x': piece.x,
+                '--delay': piece.delay,
+                '--duration': piece.duration,
+                '--rotate': piece.rotate,
+                '--rotate-end': piece.rotateEnd,
+                background: piece.color
+              }"
+            ></i>
+          </div>
+          <button class="inspiration-close" type="button" aria-label="关闭" @click="closeInspiration">x</button>
+          <div class="success-ring">
+            <el-icon><Check /></el-icon>
+          </div>
+          <p class="inspiration-kicker">打卡完成</p>
+          <h3 id="inspiration-title">今天也认真完成了一步</h3>
+          <blockquote>{{ inspirationCard.content }}</blockquote>
+          <p v-if="inspirationCard.cn" class="inspiration-cn">{{ inspirationCard.cn }}</p>
+          <p v-if="inspirationCard.example" class="inspiration-example">例句：{{ inspirationCard.example }}</p>
+          <div v-if="inspirationCard.peerTips.length > 0" class="peer-tip-list">
+            <strong>同路人寄语</strong>
+            <article v-for="tip in inspirationCard.peerTips" :key="`${tip.goalName}-${tip.remark}`">
+              <span>「{{ tip.remark }}」</span>
+              <small>{{ tip.goalName }}</small>
+            </article>
+          </div>
+          <el-button type="primary" class="inspiration-action" @click="closeInspiration">继续坚持</el-button>
+        </section>
+      </div>
+    </transition>
   </section>
 </template>
 
 <script setup>
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import * as echarts from 'echarts'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { Aim, Bell, Calendar, Check, DataAnalysis, Download, Edit, Lock, Medal, Plus, Refresh, SwitchButton, Timer, User } from '@element-plus/icons-vue'
 import { authApi, badgeApi, checkInApi, exportApi, goalApi, socialApi, statsApi, userApi } from './api'
 
@@ -828,6 +866,17 @@ const timelineDays = ref(30)
 const profileForm = reactive({ username: '', email: '' })
 const passwordForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
 const passwordDialogVisible = ref(false)
+const inspirationVisible = ref(false)
+const inspirationCard = reactive({ content: '', cn: '', example: '', peerTips: [] })
+const inspirationConfetti = Array.from({ length: 18 }, (_, index) => ({
+  id: index,
+  x: `${8 + ((index * 17) % 84)}%`,
+  delay: `${(index % 6) * 0.08}s`,
+  duration: `${1.4 + (index % 5) * 0.12}s`,
+  rotate: `${(index * 47) % 180}deg`,
+  rotateEnd: `${220 + ((index * 53) % 220)}deg`,
+  color: ['#2f80ed', '#13a46f', '#f59f00', '#e03131', '#8b5cf6'][index % 5]
+}))
 const userKeyword = ref('')
 const socialTab = ref('friends')
 const selectedChatFriendId = ref(null)
@@ -1048,19 +1097,23 @@ async function deleteGoal(id) {
 function showInspiration(data) {
   if (data?.inspiration) {
     const ins = data.inspiration
-    let msg = `<div style="margin-bottom: 12px;"><strong>${ins.content}</strong></div>`
-    if (ins.cn) msg += `<div style="color: #909399; margin-bottom: 12px;">${ins.cn}</div>`
-    if (ins.example) msg += `<div style="color: #606266; font-style: italic; margin-bottom: 12px;">例句：${ins.example}</div>`
-    if (data.peerTips?.length > 0) {
-      msg += `<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #ebeef5;"><strong>同路人寄语：</strong></div>`
-      data.peerTips.forEach(t => {
-        msg += `<div style="margin-top: 6px; color: #606266;">「${t.remark}」<br><small style="color: #909399;">—— ${t.goalName}</small></div>`
-      })
-    }
-    ElMessageBox.alert(msg, '🎉 打卡成功 · 精选内容', { dangerouslyUseHTMLString: true, confirmButtonText: '继续努力' })
+    Object.assign(inspirationCard, {
+      content: ins.content || '坚持本身就是最好的证明。',
+      cn: ins.cn || '',
+      example: ins.example || '',
+      peerTips: data.peerTips || []
+    })
+    inspirationVisible.value = false
+    nextTick(() => {
+      inspirationVisible.value = true
+    })
   } else {
     ElMessage.success('打卡成功')
   }
+}
+
+function closeInspiration() {
+  inspirationVisible.value = false
 }
 
 async function quickCheckIn(goal) {
