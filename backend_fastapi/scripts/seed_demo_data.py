@@ -12,6 +12,7 @@ from app.models import (
     CheckIn,
     CircleMember,
     CirclePost,
+    DirectMessage,
     Friendship,
     Goal,
     PostComment,
@@ -205,6 +206,27 @@ def ensure_comment(db, post: CirclePost, user: User, content: str):
         db.add(PostComment(post_id=post.id, user_id=user.id, content=content, create_time=current_time()))
 
 
+def ensure_message(db, sender: User, receiver: User, content: str, minutes_ago: int):
+    exists = (
+        db.query(DirectMessage)
+        .filter(
+            DirectMessage.sender_id == sender.id,
+            DirectMessage.receiver_id == receiver.id,
+            DirectMessage.content == content,
+        )
+        .first()
+    )
+    if exists is None:
+        db.add(
+            DirectMessage(
+                sender_id=sender.id,
+                receiver_id=receiver.id,
+                content=content,
+                create_time=current_time() - timedelta(minutes=minutes_ago),
+            )
+        )
+
+
 def reset_demo(db):
     users = db.query(User).filter(User.username.in_([username for username, _ in DEMO_USERS])).all()
     user_ids = [user.id for user in users]
@@ -235,6 +257,10 @@ def reset_demo(db):
     db.query(Friendship).filter(
         (Friendship.requester_id.in_(fallback_ids(user_ids)))
         | (Friendship.addressee_id.in_(fallback_ids(user_ids)))
+    ).delete(synchronize_session=False)
+    db.query(DirectMessage).filter(
+        (DirectMessage.sender_id.in_(fallback_ids(user_ids)))
+        | (DirectMessage.receiver_id.in_(fallback_ids(user_ids)))
     ).delete(synchronize_session=False)
     db.query(UserBadge).filter(UserBadge.user_id.in_(fallback_ids(user_ids))).delete(synchronize_session=False)
     db.query(CheckIn).filter(CheckIn.user_id.in_(fallback_ids(user_ids))).delete(synchronize_session=False)
@@ -277,6 +303,10 @@ def seed_demo(db):
     ensure_friendship(db, users["member3"], users["demo_admin"], "ACCEPTED", "一起坚持运动和英语打卡")
     ensure_friendship(db, users["member3"], users["member1"], "ACCEPTED", "互相监督打卡")
     ensure_friendship(db, users["member2"], users["member3"], "PENDING", "一起交流阅读和英语学习")
+    ensure_message(db, users["demo_admin"], users["member3"], "今天英语听力做了吗？我刚听完一篇慢速新闻。", 160)
+    ensure_message(db, users["member3"], users["demo_admin"], "做了，精听 20 分钟，准备晚上再跟读一遍。", 135)
+    ensure_message(db, users["member1"], users["member3"], "晚上还去跑步吗？我想把 3 公里坚持下来。", 95)
+    ensure_message(db, users["member3"], users["member1"], "去，先慢跑热身，别一开始就冲配速。", 70)
 
     sport = ensure_circle(db, "运动打卡圈", "记录跑步、力量训练和拉伸恢复，和同伴一起保持运动节奏。", "FIT", users["member3"])
     english = ensure_circle(db, "英语打卡圈", "分享背单词、听力精听和口语练习，稳定积累英语输入输出。", "EN", users["demo_admin"])

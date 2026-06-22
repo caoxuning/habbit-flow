@@ -277,6 +277,7 @@
       <div v-if="activeView === 'social'" class="social-space">
         <el-tabs v-model="socialTab">
           <el-tab-pane label="好友管理" name="friends" />
+          <el-tab-pane label="好友聊天" name="chat" />
           <el-tab-pane label="圈子广场" name="circles" />
           <el-tab-pane label="社区动态" name="feed" />
         </el-tabs>
@@ -342,8 +343,63 @@
               <article v-for="friend in friends" :key="friend.id" class="mini-card">
                 <strong>{{ friend.username }}</strong>
                 <span>{{ friend.email || '未填写邮箱' }}</span>
+                <el-button size="small" type="primary" @click="openChat(friend)">聊天</el-button>
               </article>
               <el-empty v-if="friends.length === 0" description="搜索用户并发送好友申请" />
+            </div>
+          </section>
+        </div>
+
+        <div v-if="socialTab === 'chat'" class="chat-layout">
+          <section class="panel chat-friends">
+            <div class="panel-head">
+              <h3>好友</h3>
+              <el-icon><User /></el-icon>
+            </div>
+            <button
+              v-for="friend in friends"
+              :key="friend.id"
+              class="chat-friend"
+              :class="{ active: selectedChatFriendId === friend.id }"
+              type="button"
+              @click="openChat(friend)"
+            >
+              <strong>{{ friend.username }}</strong>
+              <span>{{ friend.email || '未填写邮箱' }}</span>
+            </button>
+            <el-empty v-if="friends.length === 0" description="添加好友后即可聊天" />
+          </section>
+
+          <section class="panel chat-panel">
+            <div class="panel-head">
+              <div>
+                <h3>{{ selectedChatFriend ? `和 ${selectedChatFriend.username} 聊天` : '选择好友开始聊天' }}</h3>
+                <p class="panel-copy">好友通过后即可互相发送私信。</p>
+              </div>
+              <el-button :icon="Refresh" :disabled="!selectedChatFriendId" @click="loadMessages(selectedChatFriendId)">刷新</el-button>
+            </div>
+            <div class="message-list">
+              <article
+                v-for="message in chatMessages"
+                :key="message.id"
+                class="message-bubble"
+                :class="{ mine: message.sender.id === profile?.id }"
+              >
+                <strong>{{ message.sender.username }}</strong>
+                <p>{{ message.content }}</p>
+                <small>{{ formatTime(message.createTime) }}</small>
+              </article>
+              <el-empty v-if="selectedChatFriendId && chatMessages.length === 0" description="还没有聊天记录" />
+              <el-empty v-if="!selectedChatFriendId" description="从左侧选择一个好友" />
+            </div>
+            <div class="message-composer">
+              <el-input
+                v-model="messageForm.content"
+                placeholder="输入消息"
+                :disabled="!selectedChatFriendId"
+                @keyup.enter="sendMessage"
+              />
+              <el-button type="primary" :disabled="!selectedChatFriendId" @click="sendMessage">发送</el-button>
             </div>
           </section>
         </div>
@@ -474,10 +530,26 @@
         </section>
       </div>
 
-      <div v-if="activeView === 'profile'" class="two-column narrow">
-        <section class="panel">
+      <div v-if="activeView === 'profile'" class="profile-layout">
+        <section class="panel profile-card">
+          <div class="profile-avatar">{{ profileInitial }}</div>
+          <div>
+            <h3>{{ profile?.username }}</h3>
+            <p>{{ profile?.email || '暂未填写邮箱' }}</p>
+          </div>
+          <div class="profile-stats">
+            <span>目标 {{ dashboard?.totalGoals ?? 0 }}</span>
+            <span>打卡 {{ dashboard?.totalCheckIns ?? 0 }}</span>
+            <span>连续 {{ dashboard?.currentStreakDays ?? 0 }} 天</span>
+          </div>
+        </section>
+
+        <section class="panel profile-settings">
           <div class="panel-head">
-            <h3>个人信息维护</h3>
+            <div>
+              <h3>账号资料</h3>
+              <p class="panel-copy">基础资料可以随时维护，安全操作会单独确认。</p>
+            </div>
             <el-icon><User /></el-icon>
           </div>
           <el-form :model="profileForm" label-position="top">
@@ -490,20 +562,20 @@
             <el-button type="primary" @click="saveProfile">保存资料</el-button>
           </el-form>
         </section>
-        <section class="panel">
+
+        <section class="panel security-card">
           <div class="panel-head">
-            <h3>修改密码</h3>
+            <div>
+              <h3>账号安全</h3>
+              <p class="panel-copy">修改密码属于敏感操作，进入弹窗后再填写原密码和新密码。</p>
+            </div>
             <el-icon><Lock /></el-icon>
           </div>
-          <el-form :model="passwordForm" label-position="top">
-            <el-form-item label="原密码">
-              <el-input v-model="passwordForm.oldPassword" type="password" show-password />
-            </el-form-item>
-            <el-form-item label="新密码">
-              <el-input v-model="passwordForm.newPassword" type="password" show-password />
-            </el-form-item>
-            <el-button @click="changePassword">更新密码</el-button>
-          </el-form>
+          <div class="security-row">
+            <span>密码</span>
+            <strong>已加密保存</strong>
+            <el-button @click="openPasswordDialog">修改密码</el-button>
+          </div>
         </section>
       </div>
     </main>
@@ -548,6 +620,21 @@
         <el-button type="primary" @click="saveGoal">保存</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="passwordDialogVisible" title="修改密码" width="420px">
+      <el-form :model="passwordForm" label-position="top">
+        <el-form-item label="原密码">
+          <el-input v-model="passwordForm.oldPassword" type="password" show-password />
+        </el-form-item>
+        <el-form-item label="新密码">
+          <el-input v-model="passwordForm.newPassword" type="password" show-password />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="passwordDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="changePassword">更新密码</el-button>
+      </template>
+    </el-dialog>
   </section>
 </template>
 
@@ -586,8 +673,12 @@ const checkForm = reactive({ goalId: null, remark: '' })
 const makeupForm = reactive({ goalId: null, checkDate: '', remark: '' })
 const profileForm = reactive({ username: '', email: '' })
 const passwordForm = reactive({ oldPassword: '', newPassword: '' })
+const passwordDialogVisible = ref(false)
 const userKeyword = ref('')
 const socialTab = ref('friends')
+const selectedChatFriendId = ref(null)
+const chatMessages = ref([])
+const messageForm = reactive({ content: '' })
 const selectedCircleId = ref(null)
 const circleForm = reactive({ name: '', description: '', icon: '' })
 const postForm = reactive({ content: '' })
@@ -634,6 +725,8 @@ const metrics = computed(() => [
 ])
 
 const todayGoals = computed(() => goalsForDate(new Date().toISOString().slice(0, 10)))
+const selectedChatFriend = computed(() => friends.value.find((friend) => friend.id === selectedChatFriendId.value))
+const profileInitial = computed(() => (profile.value?.username || 'H').slice(0, 1).toUpperCase())
 
 onMounted(() => {
   if (token.value) {
@@ -647,6 +740,12 @@ watch(activeView, () => {
   }
   if (activeView.value === 'social') {
     loadSocialData()
+  }
+})
+
+watch(socialTab, () => {
+  if (socialTab.value === 'chat') {
+    prepareChat()
   }
 })
 
@@ -701,6 +800,15 @@ async function loadSocialData() {
   friendRequests.value = requestsData
   circles.value = circlesData
   feedPosts.value = normalizeList(feedData)
+  if (!selectedChatFriendId.value && friends.value.length > 0) {
+    selectedChatFriendId.value = friends.value[0].id
+  }
+  if (selectedChatFriendId.value && friends.value.some((friend) => friend.id === selectedChatFriendId.value)) {
+    await loadMessages(selectedChatFriendId.value)
+  } else {
+    selectedChatFriendId.value = null
+    chatMessages.value = []
+  }
   if (!selectedCircleId.value && circles.value.length > 0) {
     selectedCircleId.value = circles.value[0].id
   }
@@ -780,7 +888,13 @@ async function saveProfile() {
 async function changePassword() {
   await userApi.changePassword(passwordForm)
   Object.assign(passwordForm, { oldPassword: '', newPassword: '' })
+  passwordDialogVisible.value = false
   ElMessage.success('密码已更新')
+}
+
+function openPasswordDialog() {
+  Object.assign(passwordForm, { oldPassword: '', newPassword: '' })
+  passwordDialogVisible.value = true
 }
 
 async function searchUsers() {
@@ -807,6 +921,37 @@ async function handleFriendRequest(id, accepted) {
     ElMessage.success('已拒绝好友申请')
   }
   await loadSocialData()
+}
+
+async function prepareChat() {
+  if (friends.value.length === 0) {
+    await loadSocialData()
+  }
+  if (!selectedChatFriendId.value && friends.value.length > 0) {
+    selectedChatFriendId.value = friends.value[0].id
+  }
+  if (selectedChatFriendId.value) {
+    await loadMessages(selectedChatFriendId.value)
+  }
+}
+
+async function openChat(friend) {
+  selectedChatFriendId.value = friend.id
+  socialTab.value = 'chat'
+  await loadMessages(friend.id)
+}
+
+async function loadMessages(friendId) {
+  if (!friendId) return
+  chatMessages.value = await socialApi.messages(friendId)
+}
+
+async function sendMessage() {
+  const content = messageForm.content.trim()
+  if (!selectedChatFriendId.value || !content) return
+  await socialApi.sendMessage(selectedChatFriendId.value, { content })
+  messageForm.content = ''
+  await loadMessages(selectedChatFriendId.value)
 }
 
 async function createCircle() {
@@ -902,6 +1047,11 @@ function statusLabel(status) {
 
 function friendshipLabel(status) {
   return { NONE: '未添加', PENDING: '待处理', ACCEPTED: '已通过', REJECTED: '已拒绝' }[status] || status
+}
+
+function formatTime(value) {
+  if (!value) return ''
+  return String(value).replace('T', ' ').slice(0, 16)
 }
 
 function priorityLabel(priority) {

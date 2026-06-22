@@ -75,6 +75,16 @@ class Friendship(Base):
     update_time: Mapped[object] = mapped_column(DateTime, nullable=False)
 
 
+class DirectMessage(Base):
+    __tablename__ = "direct_message"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    sender_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
+    receiver_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    create_time: Mapped[object] = mapped_column(DateTime, nullable=False)
+
+
 class SocialCircle(Base):
     __tablename__ = "social_circle"
 

@@ -55,6 +55,10 @@ class PostCommentRequest(BaseModel):
     content: str = Field(min_length=1)
 
 
+class DirectMessageRequest(BaseModel):
+    content: str = Field(min_length=1)
+
+
 def user_profile(user):
     return {
         "id": user.id,
@@ -185,4 +189,14 @@ def post_comment_dict(comment, author):
         "author": user_summary(author),
         "content": comment.content,
         "createTime": comment.create_time,
+    }
+
+
+def direct_message_dict(message, sender, receiver):
+    return {
+        "id": message.id,
+        "sender": user_summary(sender),
+        "receiver": user_summary(receiver),
+        "content": message.content,
+        "createTime": message.create_time,
     }
