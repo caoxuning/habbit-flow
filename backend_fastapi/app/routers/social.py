@@ -6,16 +6,18 @@ from sqlalchemy.orm import Session
 
 from ..common import AppException, ok
 from ..deps import get_current_user, get_db
-from ..models import CircleMember, CirclePost, Friendship, SocialCircle, User
+from ..models import CircleMember, CirclePost, Friendship, PostComment, PostLike, SocialCircle, User
 from ..schemas import (
     CirclePostRequest,
     CircleRequest,
     FriendRequest,
+    PostCommentRequest,
     circle_dict,
     circle_member_dict,
     circle_post_dict,
     friend_view,
     friendship_dict,
+    post_comment_dict,
     user_summary,
 )
 
@@ -64,10 +66,30 @@ def serialize_circle(db: Session, circle: SocialCircle, current_user_id: int):
     return circle_dict(circle, owner, joined)
 
 
-def serialize_post(db: Session, post: CirclePost):
+def get_post(db: Session, post_id: int) -> CirclePost:
+    post = db.query(CirclePost).filter(CirclePost.id == post_id).first()
+    if post is None:
+        raise AppException("帖子不存在", 404)
+    return post
+
+
+def require_circle_member(db: Session, circle_id: int, user_id: int):
+    if get_member(db, circle_id, user_id) is None:
+        raise AppException("加入圈子后才能操作")
+
+
+def serialize_post(db: Session, post: CirclePost, current_user_id: int):
     circle = db.query(SocialCircle).filter(SocialCircle.id == post.circle_id).first()
     author = db.query(User).filter(User.id == post.user_id).first()
-    return circle_post_dict(post, circle, author)
+    like_count = db.query(PostLike).filter(PostLike.post_id == post.id).count()
+    comment_count = db.query(PostComment).filter(PostComment.post_id == post.id).count()
+    liked = (
+        db.query(PostLike)
+        .filter(PostLike.post_id == post.id, PostLike.user_id == current_user_id)
+        .first()
+        is not None
+    )
+    return circle_post_dict(post, circle, author, like_count, comment_count, liked)
 
 
 @router.get("/users/search")
@@ -324,7 +346,7 @@ def list_circle_posts(
         .limit(50)
         .all()
     )
-    return ok([serialize_post(db, row) for row in rows])
+    return ok([serialize_post(db, row, current_user.id) for row in rows])
 
 
 @router.post("/circles/{circle_id}/posts")
@@ -346,7 +368,89 @@ def publish_post(
     db.add(post)
     db.commit()
     db.refresh(post)
-    return ok(serialize_post(db, post))
+    return ok(serialize_post(db, post, current_user.id))
+
+
+@router.post("/posts/{post_id}/like")
+def like_post(
+    post_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    post = get_post(db, post_id)
+    require_circle_member(db, post.circle_id, current_user.id)
+    exists = (
+        db.query(PostLike)
+        .filter(PostLike.post_id == post.id, PostLike.user_id == current_user.id)
+        .first()
+    )
+    if exists is None:
+        db.add(PostLike(post_id=post.id, user_id=current_user.id, create_time=datetime.now()))
+        db.commit()
+    like_count = db.query(PostLike).filter(PostLike.post_id == post.id).count()
+    return ok({"liked": True, "likeCount": like_count})
+
+
+@router.delete("/posts/{post_id}/like")
+def unlike_post(
+    post_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    post = get_post(db, post_id)
+    require_circle_member(db, post.circle_id, current_user.id)
+    exists = (
+        db.query(PostLike)
+        .filter(PostLike.post_id == post.id, PostLike.user_id == current_user.id)
+        .first()
+    )
+    if exists is not None:
+        db.delete(exists)
+        db.commit()
+    like_count = db.query(PostLike).filter(PostLike.post_id == post.id).count()
+    return ok({"liked": False, "likeCount": like_count})
+
+
+@router.get("/posts/{post_id}/comments")
+def list_post_comments(
+    post_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    post = get_post(db, post_id)
+    require_circle_member(db, post.circle_id, current_user.id)
+    rows = (
+        db.query(PostComment)
+        .filter(PostComment.post_id == post.id)
+        .order_by(PostComment.create_time.asc())
+        .all()
+    )
+    result = []
+    for row in rows:
+        author = db.query(User).filter(User.id == row.user_id).first()
+        result.append(post_comment_dict(row, author))
+    return ok(result)
+
+
+@router.post("/posts/{post_id}/comments")
+def create_post_comment(
+    post_id: int,
+    request: PostCommentRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    post = get_post(db, post_id)
+    require_circle_member(db, post.circle_id, current_user.id)
+    comment = PostComment(
+        post_id=post.id,
+        user_id=current_user.id,
+        content=request.content,
+        create_time=datetime.now(),
+    )
+    db.add(comment)
+    db.commit()
+    db.refresh(comment)
+    return ok(post_comment_dict(comment, current_user))
 
 
 @router.get("/feed")
@@ -362,4 +466,4 @@ def feed(current_user: User = Depends(get_current_user), db: Session = Depends(g
         .limit(50)
         .all()
     )
-    return ok([serialize_post(db, row) for row in rows])
+    return ok([serialize_post(db, row, current_user.id) for row in rows])

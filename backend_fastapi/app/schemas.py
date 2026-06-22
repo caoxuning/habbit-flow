@@ -50,6 +50,10 @@ class CirclePostRequest(BaseModel):
     content: str = Field(min_length=1)
 
 
+class PostCommentRequest(BaseModel):
+    content: str = Field(min_length=1)
+
+
 def user_profile(user):
     return {
         "id": user.id,
@@ -158,15 +162,25 @@ def circle_member_dict(member, user):
     }
 
 
-def circle_post_dict(post, circle, author):
+def circle_post_dict(post, circle, author, like_count: int = 0, comment_count: int = 0, liked: bool = False):
     return {
         "id": post.id,
         "circleId": circle.id,
         "circleName": circle.name,
         "author": user_summary(author),
         "content": post.content,
-        "likeCount": 0,
-        "commentCount": 0,
-        "liked": False,
+        "likeCount": like_count,
+        "commentCount": comment_count,
+        "liked": liked,
         "createTime": post.create_time,
+    }
+
+
+def post_comment_dict(comment, author):
+    return {
+        "id": comment.id,
+        "postId": comment.post_id,
+        "author": user_summary(author),
+        "content": comment.content,
+        "createTime": comment.create_time,
     }
