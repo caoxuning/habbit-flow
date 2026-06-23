@@ -103,6 +103,14 @@ h1 {
   border-right: none;
 }
 
+.sidebar .el-menu-item {
+  gap: 8px;
+}
+
+.menu-badge {
+  margin-left: auto;
+}
+
 .logout {
   margin-top: auto;
 }
@@ -211,6 +219,113 @@ h1 {
   height: 330px;
 }
 
+.notification-layout {
+  max-width: 1120px;
+}
+
+.notification-actions,
+.notification-title-row,
+.notification-row-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.notification-actions {
+  justify-content: flex-end;
+}
+
+.notification-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.notification-summary article {
+  padding: 14px;
+  border: 1px solid #d9e2ec;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.notification-summary strong,
+.notification-summary span {
+  display: block;
+}
+
+.notification-summary strong {
+  font-size: 26px;
+  margin-bottom: 4px;
+}
+
+.notification-summary span {
+  color: #52606d;
+}
+
+.notification-list {
+  display: grid;
+  gap: 10px;
+}
+
+.notification-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid #d9e2ec;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.notification-item.unread {
+  box-shadow: 0 0 0 2px rgba(47, 128, 237, 0.08);
+}
+
+.notification-item.daily {
+  border-left: 4px solid #2f80ed;
+}
+
+.notification-item.expire {
+  border-left: 4px solid #f59f00;
+}
+
+.notification-item.break {
+  border-left: 4px solid #e03131;
+}
+
+.notification-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: #eef6ff;
+  color: #2f80ed;
+}
+
+.notification-item.expire .notification-icon {
+  background: #fff4d6;
+  color: #b76e00;
+}
+
+.notification-item.break .notification-icon {
+  background: #ffe3e3;
+  color: #c92a2a;
+}
+
+.notification-item p {
+  margin: 8px 0 4px;
+  color: #344054;
+  line-height: 1.6;
+}
+
+.notification-item small {
+  color: #667482;
+}
+
 .calendar-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
@@ -278,10 +393,27 @@ h1 {
 }
 
 .calendar-cell {
+  width: 100%;
   min-height: 116px;
+  border-radius: 6px;
+  padding: 2px;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 6px;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  transition: background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.calendar-cell:hover {
+  background: #f5f8fc;
+}
+
+.calendar-cell:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px #2f80ed inset;
 }
 
 .calendar-day {
@@ -307,7 +439,7 @@ h1 {
   gap: 6px;
   align-items: center;
   color: #17202a;
-  cursor: default;
+  cursor: inherit;
   text-align: left;
   font: inherit;
 }
@@ -322,6 +454,31 @@ h1 {
 .calendar-task small {
   color: inherit;
   opacity: 0.8;
+}
+
+.calendar-overflow-hint {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  align-items: center;
+  padding: 0 2px;
+  color: #52606d;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.calendar-overflow-hint span {
+  color: #2f80ed;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.calendar-overflow-hint small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .calendar-task.priority-normal,
@@ -340,6 +497,92 @@ h1 {
 .today-task.priority-urgent {
   background: #ffe3e3;
   border-color: #ff8787;
+}
+
+.calendar-dialog-body {
+  display: grid;
+  gap: 12px;
+}
+
+.calendar-dialog-copy {
+  margin: 0;
+  color: #667482;
+  line-height: 1.7;
+}
+
+.calendar-dialog-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.calendar-dialog-stats span {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #edf2f7;
+  color: #334e68;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.calendar-dialog-task {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #d9e2ec;
+  border-radius: 8px;
+}
+
+.calendar-dialog-task.priority-normal {
+  background: #f8fafc;
+  border-color: #c8d1dc;
+}
+
+.calendar-dialog-task.priority-important {
+  background: #fffbeb;
+  border-color: #f0b429;
+}
+
+.calendar-dialog-task.priority-urgent {
+  background: #fff1f1;
+  border-color: #ff8787;
+}
+
+.calendar-dialog-task-main {
+  min-width: 0;
+}
+
+.calendar-dialog-task-main strong,
+.calendar-dialog-task-main span {
+  display: block;
+  min-width: 0;
+}
+
+.calendar-dialog-task-main strong {
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-dialog-task-main span,
+.calendar-dialog-task-main p {
+  color: #52606d;
+  font-size: 13px;
+}
+
+.calendar-dialog-task-main p {
+  margin: 6px 0 0;
+  line-height: 1.5;
+}
+
+.calendar-dialog-task-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
 }
 
 .today-task {
@@ -563,6 +806,48 @@ h1 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.friend-checkin-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.friend-checkin-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #f0b429;
+  border-radius: 8px;
+  background: #fffbeb;
+}
+
+.friend-checkin-card.done {
+  border-color: #8fd6ad;
+  background: #f0fdf4;
+}
+
+.friend-checkin-card strong,
+.friend-checkin-card span {
+  display: block;
+  min-width: 0;
+}
+
+.friend-checkin-card span {
+  margin-top: 4px;
+  color: #52606d;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.checkin-share-body {
+  display: grid;
+  gap: 12px;
 }
 
 .avatar-sm,
@@ -1216,8 +1501,10 @@ h1 {
   .mini-card.selectable,
   .comment-item,
   .calendar-task,
+  .calendar-dialog-task,
   .today-task,
   .friend-card,
+  .friend-checkin-card,
   .chat-friend,
   .chat-thread-head,
   .circle-card,
@@ -1246,5 +1533,9 @@ h1 {
 
   .calendar-panel .el-calendar-day {
     height: 150px;
+  }
+
+  .calendar-dialog-task-tags {
+    justify-content: flex-start;
   }
 }

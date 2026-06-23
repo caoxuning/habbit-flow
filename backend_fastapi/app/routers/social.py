@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import or_
@@ -6,8 +6,9 @@ from sqlalchemy.orm import Session
 
 from ..common import AppException, ok
 from ..deps import get_current_user, get_db
-from ..models import CircleMember, CirclePost, DirectMessage, Friendship, PostComment, PostLike, SocialCircle, User
+from ..models import CheckIn, CircleMember, CirclePost, DirectMessage, Friendship, Goal, PostComment, PostLike, SocialCircle, User
 from ..schemas import (
+    CheckInShareRequest,
     CirclePostRequest,
     CircleRequest,
     DirectMessageRequest,
@@ -16,6 +17,7 @@ from ..schemas import (
     circle_dict,
     circle_member_dict,
     circle_post_dict,
+    check_in_dict,
     direct_message_dict,
     friend_view,
     friendship_dict,
@@ -24,6 +26,14 @@ from ..schemas import (
 )
 
 router = APIRouter(prefix="/api/social", tags=["社交"])
+POST_VISIBILITIES = {"PUBLIC", "FRIENDS", "CIRCLE", "PRIVATE"}
+
+
+def normalize_visibility(value: str | None) -> str:
+    visibility = (value or "PUBLIC").upper()
+    if visibility not in POST_VISIBILITIES:
+        raise AppException("动态可见范围不正确")
+    return visibility
 
 
 def friendship_between(db: Session, left_user_id: int, right_user_id: int) -> Friendship | None:
@@ -49,6 +59,18 @@ def require_friendship(db: Session, current_user_id: int, target_user_id: int):
     friendship = friendship_between(db, current_user_id, target_user_id)
     if friendship is None or friendship.status != "ACCEPTED":
         raise AppException("成为好友后才能聊天")
+
+
+def friend_ids_for_user(db: Session, user_id: int) -> list[int]:
+    rows = (
+        db.query(Friendship)
+        .filter(
+            Friendship.status == "ACCEPTED",
+            or_(Friendship.requester_id == user_id, Friendship.addressee_id == user_id),
+        )
+        .all()
+    )
+    return [row.addressee_id if row.requester_id == user_id else row.requester_id for row in rows]
 
 
 def get_circle(db: Session, circle_id: int) -> SocialCircle:
@@ -86,6 +108,19 @@ def require_circle_member(db: Session, circle_id: int, user_id: int):
         raise AppException("加入圈子后才能操作")
 
 
+def can_view_post(db: Session, post: CirclePost, current_user_id: int) -> bool:
+    if post.user_id == current_user_id:
+        return True
+    if post.visibility == "PRIVATE":
+        return False
+    if post.visibility == "FRIENDS":
+        friendship = friendship_between(db, current_user_id, post.user_id)
+        return friendship is not None and friendship.status == "ACCEPTED"
+    if post.visibility == "CIRCLE":
+        return get_member(db, post.circle_id, current_user_id) is not None
+    return True
+
+
 def serialize_post(db: Session, post: CirclePost, current_user_id: int):
     circle = db.query(SocialCircle).filter(SocialCircle.id == post.circle_id).first()
     author = db.query(User).filter(User.id == post.user_id).first()
@@ -98,6 +133,30 @@ def serialize_post(db: Session, post: CirclePost, current_user_id: int):
         is not None
     )
     return circle_post_dict(post, circle, author, like_count, comment_count, liked)
+
+
+def notify_friends_for_checkin(
+    db: Session,
+    sender: User,
+    friend_ids: list[int],
+    goal: Goal,
+    post: CirclePost | None,
+):
+    if not friend_ids:
+        return
+    now = datetime.now()
+    content = f"{sender.username} 完成了「{goal.name}」打卡"
+    if post is not None:
+        content += "，并分享了一条打卡动态，快去鼓励一下吧。"
+    else:
+        content += "，快去鼓励一下吧。"
+    for friend_id in friend_ids:
+        db.add(DirectMessage(
+            sender_id=sender.id,
+            receiver_id=friend_id,
+            content=content,
+            create_time=now,
+        ))
 
 
 @router.get("/users/search")
@@ -231,6 +290,41 @@ def list_friends(current_user: User = Depends(get_current_user), db: Session = D
         friend_id = row.addressee_id if row.requester_id == current_user.id else row.requester_id
         friend = db.query(User).filter(User.id == friend_id).first()
         result.append(friend_view(friend, row))
+    return ok(result)
+
+
+@router.get("/friends/checkins/today")
+def friends_today_checkins(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    friend_ids = friend_ids_for_user(db, current_user.id)
+    if not friend_ids:
+        return ok([])
+    today = date.today()
+    result = []
+    for friend in db.query(User).filter(User.id.in_(friend_ids)).order_by(User.username.asc()).all():
+        active_goal_count = (
+            db.query(Goal)
+            .filter(
+                Goal.user_id == friend.id,
+                Goal.status == "ACTIVE",
+                Goal.start_date <= today,
+                Goal.end_date >= today,
+            )
+            .count()
+        )
+        rows = (
+            db.query(CheckIn, Goal)
+            .join(Goal, CheckIn.goal_id == Goal.id)
+            .filter(CheckIn.user_id == friend.id, CheckIn.check_date == today)
+            .order_by(CheckIn.check_time.desc())
+            .all()
+        )
+        result.append({
+            "friend": user_summary(friend),
+            "activeGoalCount": active_goal_count,
+            "doneCount": len(rows),
+            "checkedIn": len(rows) > 0,
+            "latestCheckIn": check_in_dict(rows[0][0], rows[0][1]) if rows else None,
+        })
     return ok(result)
 
 
@@ -408,7 +502,7 @@ def list_circle_posts(
         .limit(50)
         .all()
     )
-    return ok([serialize_post(db, row, current_user.id) for row in rows])
+    return ok([serialize_post(db, row, current_user.id) for row in rows if can_view_post(db, row, current_user.id)])
 
 
 @router.post("/circles/{circle_id}/posts")
@@ -424,6 +518,8 @@ def publish_post(
     post = CirclePost(
         circle_id=circle.id,
         user_id=current_user.id,
+        visibility=normalize_visibility(request.visibility),
+        post_type="NORMAL",
         content=request.content,
         create_time=datetime.now(),
     )
@@ -433,6 +529,65 @@ def publish_post(
     return ok(serialize_post(db, post, current_user.id))
 
 
+@router.post("/checkins/share")
+def share_check_in(
+    request: CheckInShareRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    row = (
+        db.query(CheckIn, Goal)
+        .join(Goal, CheckIn.goal_id == Goal.id)
+        .filter(CheckIn.id == request.checkInId, CheckIn.user_id == current_user.id)
+        .first()
+    )
+    if row is None:
+        raise AppException("打卡记录不存在", 404)
+    checkin, goal = row
+    visibility = normalize_visibility(request.visibility)
+    post = None
+    if visibility != "PRIVATE":
+        circle_id = request.circleId
+        if circle_id is None:
+            membership = (
+                db.query(CircleMember)
+                .filter(CircleMember.user_id == current_user.id)
+                .order_by(CircleMember.join_time.asc())
+                .first()
+            )
+            if membership is None:
+                raise AppException("请先加入一个圈子，或选择仅通知好友/仅自己可见")
+            circle_id = membership.circle_id
+        circle = get_circle(db, circle_id)
+        if get_member(db, circle.id, current_user.id) is None:
+            raise AppException("加入圈子后才能分享动态")
+        post = CirclePost(
+            circle_id=circle.id,
+            user_id=current_user.id,
+            check_in_id=checkin.id,
+            visibility=visibility,
+            post_type="CHECK_IN",
+            content=request.content.strip(),
+            create_time=datetime.now(),
+        )
+        db.add(post)
+
+    notified_ids: list[int] = []
+    if request.shareToFriends:
+        available_friend_ids = set(friend_ids_for_user(db, current_user.id))
+        requested_friend_ids = request.friendIds or list(available_friend_ids)
+        notified_ids = [friend_id for friend_id in requested_friend_ids if friend_id in available_friend_ids]
+        notify_friends_for_checkin(db, current_user, notified_ids, goal, post)
+
+    db.commit()
+    if post is not None:
+        db.refresh(post)
+    return ok({
+        "post": serialize_post(db, post, current_user.id) if post is not None else None,
+        "notifiedFriendCount": len(notified_ids),
+    })
+
+
 @router.post("/posts/{post_id}/like")
 def like_post(
     post_id: int,
@@ -440,7 +595,8 @@ def like_post(
     db: Session = Depends(get_db),
 ):
     post = get_post(db, post_id)
-    require_circle_member(db, post.circle_id, current_user.id)
+    if not can_view_post(db, post, current_user.id):
+        raise AppException("无权查看该动态", 403)
     exists = (
         db.query(PostLike)
         .filter(PostLike.post_id == post.id, PostLike.user_id == current_user.id)
@@ -448,6 +604,13 @@ def like_post(
     )
     if exists is None:
         db.add(PostLike(post_id=post.id, user_id=current_user.id, create_time=datetime.now()))
+        if post.user_id != current_user.id:
+            db.add(DirectMessage(
+                sender_id=current_user.id,
+                receiver_id=post.user_id,
+                content=f"{current_user.username} 给你的打卡动态点了赞。",
+                create_time=datetime.now(),
+            ))
         db.commit()
     like_count = db.query(PostLike).filter(PostLike.post_id == post.id).count()
     return ok({"liked": True, "likeCount": like_count})
@@ -460,7 +623,8 @@ def unlike_post(
     db: Session = Depends(get_db),
 ):
     post = get_post(db, post_id)
-    require_circle_member(db, post.circle_id, current_user.id)
+    if not can_view_post(db, post, current_user.id):
+        raise AppException("无权查看该动态", 403)
     exists = (
         db.query(PostLike)
         .filter(PostLike.post_id == post.id, PostLike.user_id == current_user.id)
@@ -480,7 +644,8 @@ def list_post_comments(
     db: Session = Depends(get_db),
 ):
     post = get_post(db, post_id)
-    require_circle_member(db, post.circle_id, current_user.id)
+    if not can_view_post(db, post, current_user.id):
+        raise AppException("无权查看该动态", 403)
     rows = (
         db.query(PostComment)
         .filter(PostComment.post_id == post.id)
@@ -502,7 +667,8 @@ def create_post_comment(
     db: Session = Depends(get_db),
 ):
     post = get_post(db, post_id)
-    require_circle_member(db, post.circle_id, current_user.id)
+    if not can_view_post(db, post, current_user.id):
+        raise AppException("无权查看该动态", 403)
     comment = PostComment(
         post_id=post.id,
         user_id=current_user.id,
@@ -510,6 +676,13 @@ def create_post_comment(
         create_time=datetime.now(),
     )
     db.add(comment)
+    if post.user_id != current_user.id:
+        db.add(DirectMessage(
+            sender_id=current_user.id,
+            receiver_id=post.user_id,
+            content=f"{current_user.username} 评论了你的打卡动态：{request.content}",
+            create_time=datetime.now(),
+        ))
     db.commit()
     db.refresh(comment)
     return ok(post_comment_dict(comment, current_user))
@@ -519,13 +692,18 @@ def create_post_comment(
 def feed(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     memberships = db.query(CircleMember.circle_id).filter(CircleMember.user_id == current_user.id).all()
     circle_ids = [row[0] for row in memberships]
-    if not circle_ids:
-        return ok([])
+    friend_ids = friend_ids_for_user(db, current_user.id)
     rows = (
         db.query(CirclePost)
-        .filter(CirclePost.circle_id.in_(circle_ids))
+        .filter(
+            or_(
+                CirclePost.user_id == current_user.id,
+                CirclePost.circle_id.in_(circle_ids or [-1]),
+                CirclePost.user_id.in_(friend_ids or [-1]),
+            )
+        )
         .order_by(CirclePost.create_time.desc())
         .limit(50)
         .all()
     )
-    return ok([serialize_post(db, row, current_user.id) for row in rows])
+    return ok([serialize_post(db, row, current_user.id) for row in rows if can_view_post(db, row, current_user.id)])

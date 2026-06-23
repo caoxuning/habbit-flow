@@ -44,6 +44,7 @@ export const socialApi = {
   requestFriend: (data) => http.post('/social/friend-requests', data),
   acceptFriend: (id) => http.put(`/social/friend-requests/${id}/accept`),
   rejectFriend: (id) => http.put(`/social/friend-requests/${id}/reject`),
+  friendsTodayCheckins: () => http.get('/social/friends/checkins/today'),
   messages: (friendId) => http.get(`/social/friends/${friendId}/messages`),
   sendMessage: (friendId, data) => http.post(`/social/friends/${friendId}/messages`, data),
   circles: (params) => http.get('/social/circles', { params }),
@@ -52,9 +53,19 @@ export const socialApi = {
   leaveCircle: (id) => http.delete(`/social/circles/${id}/leave`),
   posts: (circleId) => http.get(`/social/circles/${circleId}/posts`),
   publishPost: (circleId, data) => http.post(`/social/circles/${circleId}/posts`, data),
+  shareCheckIn: (data) => http.post('/social/checkins/share', data),
   likePost: (postId) => http.post(`/social/posts/${postId}/like`),
   unlikePost: (postId) => http.delete(`/social/posts/${postId}/like`),
   comments: (postId) => http.get(`/social/posts/${postId}/comments`),
   commentPost: (postId, data) => http.post(`/social/posts/${postId}/comments`, data),
   feed: () => http.get('/social/feed')
+}
+
+export const notificationApi = {
+  list: (params) => http.get('/notifications', { params }),
+  unreadCount: () => http.get('/notifications/unread-count'),
+  generate: () => http.post('/notifications/generate'),
+  markRead: (id) => http.put(`/notifications/${id}/read`),
+  markAllRead: () => http.put('/notifications/read-all'),
+  remove: (id) => http.delete(`/notifications/${id}`)
 }
