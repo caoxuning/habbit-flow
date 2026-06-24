@@ -8,6 +8,7 @@ frontend/vite-dev.err.log
 *.log
 .idea/
 .vscode/
+*.local.bat
 
 __pycache__/
 *.pyc
