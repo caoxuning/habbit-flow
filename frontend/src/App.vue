@@ -57,6 +57,11 @@
           <el-icon><Timer /></el-icon>
           <span>成长日志</span>
         </el-menu-item>
+        <el-menu-item index="notifications">
+          <el-icon><Bell /></el-icon>
+          <span>消息提醒</span>
+          <el-badge v-if="notificationUnreadCount > 0" :value="notificationUnreadCount" class="menu-badge" />
+        </el-menu-item>
         <el-menu-item index="badges">
           <el-icon><Medal /></el-icon>
           <span>勋章奖励</span>
@@ -137,7 +142,7 @@
           <div class="panel-head calendar-head">
             <div>
               <h3>任务日历</h3>
-              <p>每天的目标会按照重要程度显示在日期下方。</p>
+              <p>每天只展示一个紧急目标和一个其他目标，点击日期查看完整日程和打卡状态。</p>
             </div>
             <div class="priority-legend">
               <span><i class="priority-dot priority-normal"></i>普通</span>
@@ -147,18 +152,29 @@
           </div>
           <el-calendar v-model="calendarDate">
             <template #date-cell="{ data }">
-              <div class="calendar-cell">
+              <div
+                class="calendar-cell"
+                role="button"
+                tabindex="0"
+                @click="openCalendarDay(data.day)"
+                @keydown.enter.prevent="openCalendarDay(data.day)"
+                @keydown.space.prevent="openCalendarDay(data.day)"
+              >
                 <strong class="calendar-day">{{ dayNumber(data.day) }}</strong>
                 <div class="calendar-task-list">
                   <article
-                    v-for="item in goalsForDate(data.day)"
-                    :key="`${data.day}-${item.goal.id}`"
+                    v-for="item in calendarSummaryForDate(data.day)"
+                    :key="`${data.day}-${item.key}`"
                     class="calendar-task"
-                    :class="priorityClass(item.goal.priority)"
+                    :class="priorityClass(item.priority)"
                   >
-                    <span>{{ item.goal.name }}</span>
-                    <small>{{ priorityLabel(item.goal.priority) }}</small>
+                    <span>{{ item.title }}</span>
+                    <small>{{ item.label }}{{ item.count > 1 ? ` +${item.count - 1}` : '' }}</small>
                   </article>
+                </div>
+                <div v-if="calendarOverflowCount(data.day) > 0" class="calendar-overflow-hint">
+                  <span>...</span>
+                  <small>共 {{ calendarOverflowCount(data.day) }} 项目标</small>
                 </div>
               </div>
             </template>
@@ -352,6 +368,62 @@
         <el-empty v-else description="暂无成长记录" />
       </div>
 
+      <div v-if="activeView === 'notifications'" class="notification-layout">
+        <section class="panel notification-panel">
+          <div class="panel-head">
+            <div>
+              <h3>分层智能提醒</h3>
+              <p class="panel-copy">系统会根据目标计划和打卡记录，自动区分三类提醒，帮助你按时推进计划。</p>
+            </div>
+            <div class="notification-actions">
+              <el-switch v-model="notificationFilters.unreadOnly" active-text="只看未读" @change="loadNotifications" />
+              <el-button :icon="Refresh" @click="generateNotifications">重新生成</el-button>
+              <el-button type="primary" :disabled="notificationUnreadCount === 0" @click="markAllNotificationsRead">全部已读</el-button>
+            </div>
+          </div>
+          <div class="notification-summary">
+            <article>
+              <strong>{{ notificationCountByType('DAILY_CHECK_IN') }}</strong>
+              <span>日常打卡提醒</span>
+            </article>
+            <article>
+              <strong>{{ notificationCountByType('GOAL_EXPIRE') }}</strong>
+              <span>目标到期预警</span>
+            </article>
+            <article>
+              <strong>{{ notificationCountByType('STREAK_BREAK') }}</strong>
+              <span>连续中断提醒</span>
+            </article>
+          </div>
+          <div class="notification-list">
+            <article
+              v-for="item in notifications"
+              :key="item.id"
+              class="notification-item"
+              :class="[notificationTypeClass(item.type), { unread: !item.read }]"
+            >
+              <div class="notification-icon">
+                <el-icon><Bell /></el-icon>
+              </div>
+              <div>
+                <div class="notification-title-row">
+                  <strong>{{ item.title }}</strong>
+                  <el-tag :type="notificationTagType(item.type)" effect="plain">{{ notificationTypeLabel(item.type) }}</el-tag>
+                  <el-tag v-if="!item.read" type="danger" effect="dark">未读</el-tag>
+                </div>
+                <p>{{ item.content }}</p>
+                <small>{{ formatDateTime(item.createTime) }}</small>
+              </div>
+              <div class="notification-row-actions">
+                <el-button size="small" :disabled="item.read" @click="markNotificationRead(item)">已读</el-button>
+                <el-button size="small" type="danger" plain @click="removeNotification(item)">删除</el-button>
+              </div>
+            </article>
+            <el-empty v-if="notifications.length === 0" description="暂无提醒消息" />
+          </div>
+        </section>
+      </div>
+
       <div v-if="activeView === 'badges'" class="badge-grid">
         <article v-for="badge in badges" :key="badge.id" class="badge-card">
           <div class="badge-icon"><el-icon><Medal /></el-icon></div>
@@ -384,6 +456,35 @@
         </el-tabs>
 
         <div v-if="socialTab === 'friends'" class="friends-dashboard">
+          <section class="panel social-wide friend-checkin-board">
+            <div class="panel-head">
+              <div>
+                <h3>好友今日打卡看板</h3>
+                <p class="panel-copy">查看好友今天是否完成打卡，并及时发送提醒或鼓励。</p>
+              </div>
+              <el-icon><Check /></el-icon>
+            </div>
+            <div class="friend-checkin-list">
+              <article v-for="item in friendCheckinBoard" :key="item.friend.id" class="friend-checkin-card" :class="{ done: item.checkedIn }">
+                <div class="avatar-sm">{{ userInitial(item.friend) }}</div>
+                <div>
+                  <strong>{{ item.friend.username }}</strong>
+                  <span v-if="item.checkedIn">
+                    已完成 {{ item.doneCount }} 次打卡，最近：{{ item.latestCheckIn?.goalName || '目标' }}
+                  </span>
+                  <span v-else>
+                    今天还没有打卡记录，当前进行中目标 {{ item.activeGoalCount }} 个
+                  </span>
+                </div>
+                <el-tag :type="item.checkedIn ? 'success' : 'warning'">{{ item.checkedIn ? '已打卡' : '待提醒' }}</el-tag>
+                <el-button size="small" :type="item.checkedIn ? 'primary' : 'warning'" @click="sendCheckinNudge(item)">
+                  {{ item.checkedIn ? '鼓励' : '提醒' }}
+                </el-button>
+              </article>
+              <el-empty v-if="friendCheckinBoard.length === 0" description="添加好友后即可查看今日打卡状态" />
+            </div>
+          </section>
+
           <section class="panel friend-search-panel">
             <div class="panel-head">
               <div>
@@ -525,12 +626,12 @@
           </section>
         </div>
 
-        <div v-if="socialTab === 'circles'" class="circle-workspace">
-          <section class="panel circle-sidebar">
-            <div class="panel-head">
+        <div v-if="socialTab === 'circles'" class="circle-workspace community-layout">
+          <aside class="circle-rail">
+            <div class="circle-rail-head">
               <div>
                 <h3>圈子广场</h3>
-                <p class="panel-copy">选择圈子查看成员动态。</p>
+                <p>{{ joinedCircles.length }} 个已加入</p>
               </div>
               <el-icon><Medal /></el-icon>
             </div>
@@ -546,47 +647,57 @@
                 </el-button>
                 <small>{{ circle.memberCount }} 人</small>
               </article>
+              <el-empty v-if="circles.length === 0" description="暂无圈子" />
             </div>
-          </section>
 
-          <section class="panel circle-composer">
-            <div class="panel-head">
-              <div>
-                <h3>发布动态</h3>
-                <p class="panel-copy">{{ selectedCircle ? `发布到 ${selectedCircle.name}` : '先选择一个圈子' }}</p>
-              </div>
-              <el-icon><Edit /></el-icon>
-            </div>
-            <el-input v-model="postForm.content" type="textarea" :rows="4" placeholder="分享今天的打卡进展，例如跑步、背单词、阅读笔记" />
-            <el-button class="post-button" type="primary" :icon="Edit" :disabled="!selectedCircleId" @click="publishPost">发布动态</el-button>
+            <el-collapse class="circle-create" accordion>
+              <el-collapse-item title="创建新圈子" name="create">
+                <el-form :model="circleForm" label-position="top">
+                  <el-form-item label="圈子名称">
+                    <el-input v-model="circleForm.name" placeholder="英语打卡圈" />
+                  </el-form-item>
+                  <el-form-item label="圈子简介">
+                    <el-input v-model="circleForm.description" type="textarea" :rows="2" />
+                  </el-form-item>
+                  <el-form-item label="图标标识">
+                    <el-input v-model="circleForm.icon" placeholder="READ" />
+                  </el-form-item>
+                  <el-button class="full-button" type="primary" :icon="Plus" @click="createCircle">创建圈子</el-button>
+                </el-form>
+              </el-collapse-item>
+            </el-collapse>
+          </aside>
 
-            <el-divider />
-
-            <div class="panel-head compact">
-              <h3>创建圈子</h3>
-              <el-icon><Plus /></el-icon>
-            </div>
-            <el-form :model="circleForm" label-position="top">
-              <el-form-item label="圈子名称">
-                <el-input v-model="circleForm.name" placeholder="英语打卡圈" />
-              </el-form-item>
-              <el-form-item label="圈子简介">
-                <el-input v-model="circleForm.description" type="textarea" :rows="3" />
-              </el-form-item>
-              <el-form-item label="图标标识">
-                <el-input v-model="circleForm.icon" placeholder="READ" />
-              </el-form-item>
-              <el-button type="primary" :icon="Plus" @click="createCircle">创建圈子</el-button>
-            </el-form>
-          </section>
-
-          <section class="panel social-wide circle-feed-panel">
-            <div class="panel-head">
+          <section class="panel circle-feed-panel community-feed">
+            <div class="community-cover">
               <div>
                 <h3>{{ selectedCircle ? selectedCircle.name : '圈子帖子' }}</h3>
                 <p class="panel-copy">{{ selectedCircle?.description || '选择一个圈子查看动态。' }}</p>
               </div>
-              <el-icon><Calendar /></el-icon>
+              <div class="community-cover-stats">
+                <span><strong>{{ selectedCircle?.memberCount || 0 }}</strong>成员</span>
+                <span><strong>{{ circlePosts.length }}</strong>动态</span>
+              </div>
+            </div>
+
+            <div class="feed-composer">
+              <div class="avatar-sm">{{ profileInitial }}</div>
+              <div class="feed-composer-main">
+                <el-input v-model="postForm.content" type="textarea" :rows="3" placeholder="分享今天的打卡进展，例如跑步、背单词、阅读笔记" />
+                <div class="feed-composer-actions">
+                  <el-tag v-if="selectedCircle" effect="plain">{{ selectedCircle.name }}</el-tag>
+                  <el-tag v-else type="info" effect="plain">未选择圈子</el-tag>
+                  <el-button type="primary" :icon="Edit" :disabled="!selectedCircle?.joined" @click="publishPost">发布动态</el-button>
+                </div>
+              </div>
+            </div>
+
+            <div class="feed-heading">
+              <div>
+                <h3>最新动态</h3>
+                <p>{{ selectedCircle ? selectedCircle.name : '全部圈子' }}</p>
+              </div>
+              <el-button text :icon="Refresh" :disabled="!selectedCircleId" @click="loadCirclePosts(selectedCircleId)">刷新</el-button>
             </div>
             <div class="post-list">
               <article v-for="post in circlePosts" :key="post.id" class="post-item">
@@ -602,6 +713,9 @@
                   </el-button>
                   <el-button size="small" @click="toggleComments(post)">
                     评论 {{ post.commentCount }}
+                  </el-button>
+                  <el-button size="small" type="success" @click="encouragePost(post)">
+                    鼓励
                   </el-button>
                 </div>
                 <div v-if="expandedPostId === post.id" class="comment-box">
@@ -621,6 +735,51 @@
               <el-empty v-if="circlePosts.length === 0" description="选择一个圈子查看或发布动态" />
             </div>
           </section>
+
+          <aside class="community-aside">
+            <section class="panel community-summary">
+              <div class="panel-head">
+                <div>
+                  <h3>我的圈子</h3>
+                  <p class="panel-copy">{{ joinedCircles.length }} 个圈子正在关注</p>
+                </div>
+                <el-icon><Calendar /></el-icon>
+              </div>
+              <div class="joined-circle-list">
+                <button
+                  v-for="circle in joinedCircles"
+                  :key="circle.id"
+                  class="joined-circle"
+                  :class="{ active: selectedCircleId === circle.id }"
+                  type="button"
+                  @click="selectCircle(circle)"
+                >
+                  <span class="circle-icon">{{ circle.icon || 'TAG' }}</span>
+                  <span>
+                    <strong>{{ circle.name }}</strong>
+                    <small>{{ circle.memberCount }} 人</small>
+                  </span>
+                </button>
+                <el-empty v-if="joinedCircles.length === 0" description="尚未加入圈子" />
+              </div>
+            </section>
+
+            <section class="panel community-summary">
+              <div class="panel-head">
+                <div>
+                  <h3>社区动态</h3>
+                  <p class="panel-copy">{{ feedPosts.length }} 条汇总动态</p>
+                </div>
+                <el-icon><Bell /></el-icon>
+              </div>
+              <article v-for="post in feedPosts.slice(0, 3)" :key="post.id" class="feed-mini-post" @click="socialTab = 'feed'">
+                <strong>{{ post.author.username }} · {{ post.circleName }}</strong>
+                <p>{{ post.content }}</p>
+              </article>
+              <el-empty v-if="feedPosts.length === 0" description="暂无动态" />
+              <el-button class="full-button" @click="socialTab = 'feed'">查看全部动态</el-button>
+            </section>
+          </aside>
         </div>
 
         <section v-if="socialTab === 'feed'" class="panel feed-panel">
@@ -645,6 +804,9 @@
                 </el-button>
                 <el-button size="small" @click="toggleComments(post)">
                   评论 {{ post.commentCount }}
+                </el-button>
+                <el-button size="small" type="success" @click="encouragePost(post)">
+                  鼓励
                 </el-button>
               </div>
               <div v-if="expandedPostId === post.id" class="comment-box">
@@ -767,6 +929,78 @@
       </template>
     </el-dialog>
 
+    <el-dialog v-model="calendarDialogVisible" :title="`${selectedCalendarDate} 日程安排`" width="560px" class="calendar-day-dialog">
+      <div class="calendar-dialog-body">
+        <p class="calendar-dialog-copy">
+          日历格子里只保留一个紧急目标和一个其他目标，避免同一天任务过多时挤在一起。当天完整日程、优先级和打卡状态如下。
+        </p>
+        <div class="calendar-dialog-stats">
+          <span>共 {{ selectedCalendarTasks.length }} 项</span>
+          <span>已打卡 {{ selectedCalendarStats.done }} 项</span>
+          <span>未打卡 {{ selectedCalendarStats.pending }} 项</span>
+        </div>
+        <article
+          v-for="item in selectedCalendarTasks"
+          :key="`dialog-${selectedCalendarDate}-${item.goal.id}`"
+          class="calendar-dialog-task"
+          :class="priorityClass(item.goal.priority)"
+        >
+          <div class="calendar-dialog-task-main">
+            <strong>{{ item.goal.name }}</strong>
+            <span>{{ item.goal.type }} · {{ cycleLabel(item.goal.cycle) }} · 每日 {{ item.goal.dailyTargetCount }} 次</span>
+            <p v-if="item.checkIn?.remark">打卡备注：{{ item.checkIn.remark }}</p>
+          </div>
+          <div class="calendar-dialog-task-tags">
+            <el-tag :type="priorityTagType(item.goal.priority)" effect="plain">{{ priorityLabel(item.goal.priority) }}</el-tag>
+            <el-tag :type="taskCheckTagType(item)" effect="dark">{{ taskCheckStatusLabel(item) }}</el-tag>
+          </div>
+        </article>
+        <el-empty v-if="selectedCalendarTasks.length === 0" description="当天暂无需要完成的任务" />
+      </div>
+      <template #footer>
+        <el-button type="primary" @click="calendarDialogVisible = false">知道了</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="shareDialogVisible" title="分享本次打卡" width="560px" class="checkin-share-dialog">
+      <div class="checkin-share-body">
+        <p class="calendar-dialog-copy">
+          打卡已完成，可以选择是否把本次完成情况同步到好友动态或圈子动态，让好友收到消息并一起监督。
+          如果只想通知好友、不发布圈子动态，可以选择“仅自己可见”并保留好友通知。
+        </p>
+        <el-form :model="shareForm" label-position="top">
+          <el-form-item label="分享内容">
+            <el-input v-model="shareForm.content" type="textarea" :rows="4" maxlength="500" show-word-limit />
+          </el-form-item>
+          <el-form-item label="可见范围">
+            <el-segmented v-model="shareForm.visibility" :options="visibilityOptions" />
+          </el-form-item>
+          <el-form-item v-if="shareForm.visibility !== 'PRIVATE'" label="发布到圈子">
+            <el-select v-model="shareForm.circleId" class="full-button" placeholder="选择圈子">
+              <el-option
+                v-for="circle in circles.filter((item) => item.joined)"
+                :key="circle.id"
+                :label="circle.name"
+                :value="circle.id"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="好友通知">
+            <el-checkbox v-model="shareForm.shareToFriends">发送打卡完成消息给好友</el-checkbox>
+          </el-form-item>
+          <el-form-item v-if="shareForm.shareToFriends" label="通知好友">
+            <el-select v-model="shareForm.friendIds" multiple collapse-tags collapse-tags-tooltip class="full-button" placeholder="默认选择全部好友">
+              <el-option v-for="friend in friends" :key="friend.id" :label="friend.username" :value="friend.id" />
+            </el-select>
+          </el-form-item>
+        </el-form>
+      </div>
+      <template #footer>
+        <el-button @click="shareDialogVisible = false">不分享</el-button>
+        <el-button type="primary" @click="submitShareCheckIn">确认分享</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="passwordDialogVisible" title="修改密码" width="420px">
       <el-form :model="passwordForm" label-position="top">
         <el-form-item label="原密码">
@@ -830,7 +1064,7 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
 import { Aim, Bell, Calendar, Check, DataAnalysis, Download, Edit, Lock, Medal, Plus, Refresh, SwitchButton, Timer, User } from '@element-plus/icons-vue'
-import { authApi, badgeApi, checkInApi, exportApi, goalApi, socialApi, statsApi, userApi } from './api'
+import { authApi, badgeApi, checkInApi, exportApi, goalApi, notificationApi, socialApi, statsApi, userApi } from './api'
 
 const token = ref(localStorage.getItem('habitflow_token'))
 const profile = ref(JSON.parse(localStorage.getItem('habitflow_profile') || 'null'))
@@ -842,16 +1076,22 @@ const authFormRef = ref()
 const dashboard = ref(null)
 const goalRows = ref([])
 const checkIns = ref([])
+const calendarCheckIns = ref([])
 const badges = ref([])
+const notifications = ref([])
+const notificationUnreadCount = ref(0)
 const socialUsers = ref([])
 const friends = ref([])
 const friendRequests = ref([])
+const friendCheckinBoard = ref([])
 const circles = ref([])
 const circlePosts = ref([])
 const feedPosts = ref([])
 const monthlyChartRef = ref()
 const rateChartRef = ref()
 const calendarDate = ref(new Date())
+const calendarDialogVisible = ref(false)
+const selectedCalendarDate = ref('')
 let monthlyChart
 let rateChart
 
@@ -861,6 +1101,7 @@ const goalForm = reactive(emptyGoal())
 const checkForm = reactive({ goalId: null, remark: '' })
 const makeupForm = reactive({ goalId: null, checkDate: '', remark: '' })
 const recordFilters = reactive({ goalId: null, dateRange: [] })
+const notificationFilters = reactive({ unreadOnly: false })
 const timelineList = ref([])
 const timelineDays = ref(30)
 const profileForm = reactive({ username: '', email: '' })
@@ -868,6 +1109,16 @@ const passwordForm = reactive({ oldPassword: '', newPassword: '', confirmPasswor
 const passwordDialogVisible = ref(false)
 const inspirationVisible = ref(false)
 const inspirationCard = reactive({ content: '', cn: '', example: '', peerTips: [] })
+const shareDialogVisible = ref(false)
+const latestCheckInShare = ref(null)
+const pendingShareData = ref(null)
+const shareForm = reactive({
+  content: '',
+  visibility: 'FRIENDS',
+  circleId: null,
+  shareToFriends: true,
+  friendIds: []
+})
 const inspirationConfetti = Array.from({ length: 18 }, (_, index) => ({
   id: index,
   x: `${8 + ((index * 17) % 84)}%`,
@@ -898,8 +1149,16 @@ const priorityOptions = [
   { label: '重要', value: 'IMPORTANT' },
   { label: '紧急', value: 'URGENT' }
 ]
+const visibilityOptions = [
+  { label: '公开', value: 'PUBLIC' },
+  { label: '好友可见', value: 'FRIENDS' },
+  { label: '圈子可见', value: 'CIRCLE' },
+  { label: '仅自己可见', value: 'PRIVATE' }
+]
+const encourageMessages = ['坚持得很稳', '今天也完成得很漂亮', '明天继续一起打卡']
 const goalTypeOptions = ['学习', '运动', '阅读', '英语', '早睡', '健身']
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const calendarVisibleGoalLimit = 2
 const authRules = computed(() => ({
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
   password: [{ required: true, min: 6, message: '密码至少 6 位', trigger: 'blur' }],
@@ -925,6 +1184,7 @@ const viewTitle = computed(() => ({
   goals: '目标管理',
   checkins: '打卡管理',
   timeline: '成长日志',
+  notifications: '消息提醒',
   badges: '勋章奖励',
   social: '社交圈子',
   profile: '个人中心'
@@ -936,6 +1196,7 @@ const viewSubtitle = computed(() => ({
   goals: '创建目标、设置周期、维护每日目标次数。',
   checkins: '提交每日打卡，处理历史补卡并查看记录。',
   timeline: '按时间线回顾你的每一次坚持与成长。',
+  notifications: '分层查看每日打卡、目标到期和连续中断提醒。',
   badges: '系统根据坚持情况自动发放奖励。',
   social: '搜索好友、加入圈子、发布动态并查看同伴进展。',
   profile: '维护账号资料并定期更新密码。'
@@ -951,8 +1212,17 @@ const metrics = computed(() => [
 const activeGoalRows = computed(() => goalRows.value.filter((item) => item.goal.status === 'ACTIVE'))
 
 const todayGoals = computed(() => goalsForDate(new Date().toISOString().slice(0, 10)))
+const selectedCalendarTasks = computed(() => tasksForDate(selectedCalendarDate.value))
+const selectedCalendarStats = computed(() => {
+  const done = selectedCalendarTasks.value.filter((item) => item.checkIn).length
+  return {
+    done,
+    pending: selectedCalendarTasks.value.length - done
+  }
+})
 const selectedChatFriend = computed(() => friends.value.find((friend) => friend.id === selectedChatFriendId.value))
 const selectedCircle = computed(() => circles.value.find((circle) => circle.id === selectedCircleId.value))
+const joinedCircles = computed(() => circles.value.filter((circle) => circle.joined))
 const profileInitial = computed(() => (profile.value?.username || 'H').slice(0, 1).toUpperCase())
 
 onMounted(() => {
@@ -963,10 +1233,16 @@ onMounted(() => {
 
 watch(activeView, () => {
   if (activeView.value === 'dashboard') {
-    nextTick(renderCharts)
+    nextTick(() => {
+      resetCharts()
+      renderCharts()
+    })
   }
   if (activeView.value === 'social') {
     loadSocialData()
+  }
+  if (activeView.value === 'notifications') {
+    loadNotifications()
   }
 })
 
@@ -1010,7 +1286,10 @@ async function loadAll() {
   dashboard.value = statsData
   goalRows.value = goalsData
   badges.value = badgeData
+  timelineList.value = timelineData
+  await loadCalendarCheckIns()
   await loadCheckIns()
+  await loadNotifications()
   await loadSocialData()
   await nextTick()
   renderCharts()
@@ -1018,16 +1297,18 @@ async function loadAll() {
 
 async function loadSocialData() {
   if (!token.value) return
-  const [friendsData, requestsData, circlesData, feedData] = await Promise.all([
+  const [friendsData, requestsData, circlesData, feedData, friendCheckinsData] = await Promise.all([
     socialApi.friends(),
     socialApi.friendRequests(),
     socialApi.circles(),
-    socialApi.feed()
+    socialApi.feed(),
+    socialApi.friendsTodayCheckins()
   ])
   friends.value = friendsData
   friendRequests.value = requestsData
   circles.value = circlesData
   feedPosts.value = normalizeList(feedData)
+  friendCheckinBoard.value = normalizeList(friendCheckinsData)
   if (!selectedChatFriendId.value && friends.value.length > 0) {
     selectedChatFriendId.value = friends.value[0].id
   }
@@ -1047,8 +1328,8 @@ async function loadSocialData() {
 
 function renderCharts() {
   if (!monthlyChartRef.value || !rateChartRef.value) return
-  monthlyChart = monthlyChart || echarts.init(monthlyChartRef.value)
-  rateChart = rateChart || echarts.init(rateChartRef.value)
+  monthlyChart = echarts.getInstanceByDom(monthlyChartRef.value) || echarts.init(monthlyChartRef.value)
+  rateChart = echarts.getInstanceByDom(rateChartRef.value) || echarts.init(rateChartRef.value)
   monthlyChart.setOption({
     tooltip: {},
     grid: { top: 28, left: 38, right: 16, bottom: 32 },
@@ -1114,6 +1395,65 @@ function showInspiration(data) {
 
 function closeInspiration() {
   inspirationVisible.value = false
+  if (pendingShareData.value) {
+    const data = pendingShareData.value
+    pendingShareData.value = null
+    prepareShareDialog(data)
+  }
+}
+
+function requestShareAfterCheckIn(data) {
+  if (!data?.checkIn) return
+  if (data?.inspiration) {
+    pendingShareData.value = data
+  } else {
+    prepareShareDialog(data)
+  }
+}
+
+function prepareShareDialog(data) {
+  const checkIn = data?.checkIn
+  if (!checkIn) return
+  const goal = goalRows.value.find((item) => item.goal.id === checkIn.goalId)?.goal
+  latestCheckInShare.value = { checkIn, goal }
+  Object.assign(shareForm, {
+    content: defaultShareContent(checkIn, goal),
+    visibility: friends.value.length > 0 ? 'FRIENDS' : 'PUBLIC',
+    circleId: selectedCircleId.value || circles.value.find((circle) => circle.joined)?.id || null,
+    shareToFriends: friends.value.length > 0,
+    friendIds: friends.value.map((friend) => friend.id)
+  })
+  shareDialogVisible.value = true
+}
+
+function defaultShareContent(checkIn, goal) {
+  const goalNameText = goal?.name || checkIn.goalName || goalName(checkIn.goalId)
+  const goalTypeText = goal?.type || checkIn.goalType || '目标'
+  const remarkText = checkIn.remark ? `，备注：${checkIn.remark}` : ''
+  return `我刚刚完成了「${goalNameText}」打卡（${goalTypeText}）${remarkText}。一起坚持，互相监督！`
+}
+
+async function submitShareCheckIn() {
+  if (!latestCheckInShare.value?.checkIn?.id) return
+  if (!shareForm.content.trim()) {
+    ElMessage.warning('请填写分享内容')
+    return
+  }
+  if (shareForm.visibility !== 'PRIVATE' && !shareForm.circleId) {
+    ElMessage.warning('请选择要发布到的圈子')
+    return
+  }
+  await socialApi.shareCheckIn({
+    checkInId: latestCheckInShare.value.checkIn.id,
+    content: shareForm.content.trim(),
+    visibility: shareForm.visibility,
+    circleId: shareForm.visibility === 'PRIVATE' ? null : shareForm.circleId,
+    shareToFriends: shareForm.shareToFriends,
+    friendIds: shareForm.shareToFriends ? shareForm.friendIds : []
+  })
+  shareDialogVisible.value = false
+  ElMessage.success('打卡分享已发送')
+  await loadSocialData()
 }
 
 async function quickCheckIn(goal) {
@@ -1124,6 +1464,7 @@ async function quickCheckIn(goal) {
   const data = await checkInApi.create({ goalId: goal.id, remark: '快速打卡' })
   showInspiration(data)
   await loadAll()
+  requestShareAfterCheckIn(data)
 }
 
 async function submitCheckIn(isMakeup) {
@@ -1145,6 +1486,9 @@ async function submitCheckIn(isMakeup) {
   showInspiration(data)
   Object.assign(form, isMakeup ? { goalId: null, checkDate: '', remark: '' } : { goalId: null, remark: '' })
   await loadAll()
+  if (!isMakeup) {
+    requestShareAfterCheckIn(data)
+  }
 }
 
 async function saveProfile() {
@@ -1243,6 +1587,17 @@ async function sendMessage() {
   await loadMessages(selectedChatFriendId.value)
 }
 
+async function sendCheckinNudge(item) {
+  const content = item.checkedIn
+    ? `看到你今天完成了${item.doneCount}次打卡，很稳，明天继续一起坚持！`
+    : '今天还没有看到你的打卡记录，记得完成目标呀，我们互相监督。'
+  await socialApi.sendMessage(item.friend.id, { content })
+  ElMessage.success(item.checkedIn ? '鼓励已发送' : '提醒已发送')
+  if (selectedChatFriendId.value === item.friend.id) {
+    await loadMessages(item.friend.id)
+  }
+}
+
 async function createCircle() {
   await socialApi.createCircle({ ...circleForm })
   Object.assign(circleForm, { name: '', description: '', icon: '' })
@@ -1306,6 +1661,15 @@ async function submitComment(post) {
   updatePostInteraction(post.id, { commentCount: (post.commentCount || 0) + 1 })
 }
 
+async function encouragePost(post) {
+  const content = encourageMessages[Math.floor(Math.random() * encourageMessages.length)]
+  await socialApi.commentPost(post.id, { content })
+  ElMessage.success('鼓励已发送')
+  await loadComments(post.id)
+  expandedPostId.value = post.id
+  updatePostInteraction(post.id, { commentCount: (post.commentCount || 0) + 1 })
+}
+
 function updatePostInteraction(postId, patch) {
   for (const collection of [circlePosts.value, feedPosts.value]) {
     const target = collection.find((item) => item.id === postId)
@@ -1360,6 +1724,56 @@ async function loadCheckIns() {
     start_date: startDate || undefined,
     end_date: endDate || undefined
   })
+  monthlyChart.resize()
+  rateChart.resize()
+}
+
+function resetCharts() {
+  if (monthlyChart && monthlyChartRef.value !== monthlyChart.getDom()) {
+    monthlyChart.dispose()
+    monthlyChart = null
+  }
+  if (rateChart && rateChartRef.value !== rateChart.getDom()) {
+    rateChart.dispose()
+    rateChart = null
+  }
+}
+
+async function loadNotifications() {
+  const data = await notificationApi.list({
+    unreadOnly: notificationFilters.unreadOnly,
+    page: 1,
+    pageSize: 50
+  })
+  notifications.value = normalizeList(data)
+  notificationUnreadCount.value = data?.unreadCount || 0
+}
+
+async function generateNotifications() {
+  const data = await notificationApi.generate()
+  notificationUnreadCount.value = data?.unreadCount || 0
+  await loadNotifications()
+  ElMessage.success('已根据当前目标生成提醒')
+}
+
+async function markNotificationRead(item) {
+  await notificationApi.markRead(item.id)
+  await loadNotifications()
+}
+
+async function markAllNotificationsRead() {
+  await notificationApi.markAllRead()
+  await loadNotifications()
+  ElMessage.success('已全部标记为已读')
+}
+
+async function removeNotification(item) {
+  await notificationApi.remove(item.id)
+  await loadNotifications()
+}
+
+async function loadCalendarCheckIns() {
+  calendarCheckIns.value = await checkInApi.list({})
 }
 
 function goalName(id) {
@@ -1408,8 +1822,62 @@ function priorityTagType(priority) {
   return { NORMAL: 'info', IMPORTANT: 'warning', URGENT: 'danger' }[priority || 'NORMAL'] || 'info'
 }
 
+function notificationTypeLabel(type) {
+  return {
+    DAILY_CHECK_IN: '日常打卡',
+    GOAL_EXPIRE: '到期预警',
+    STREAK_BREAK: '中断提醒'
+  }[type] || '提醒'
+}
+
+function notificationTagType(type) {
+  return {
+    DAILY_CHECK_IN: 'primary',
+    GOAL_EXPIRE: 'warning',
+    STREAK_BREAK: 'danger'
+  }[type] || 'info'
+}
+
+function notificationTypeClass(type) {
+  return {
+    DAILY_CHECK_IN: 'daily',
+    GOAL_EXPIRE: 'expire',
+    STREAK_BREAK: 'break'
+  }[type] || 'normal'
+}
+
+function notificationCountByType(type) {
+  return notifications.value.filter((item) => item.type === type).length
+}
+
 function dayNumber(day) {
   return Number(day.slice(-2))
+}
+
+function calendarSummaryForDate(day) {
+  const tasks = tasksForDate(day)
+  const urgentTasks = tasks.filter((item) => item.goal.priority === 'URGENT')
+  const otherTasks = tasks.filter((item) => item.goal.priority !== 'URGENT')
+  return [
+    summaryItem('urgent', '紧急', 'URGENT', urgentTasks),
+    summaryItem('other', '其他', otherTasks[0]?.goal.priority || 'NORMAL', otherTasks)
+  ].filter(Boolean)
+}
+
+function calendarOverflowCount(day) {
+  const total = goalsForDate(day).length
+  return total > calendarVisibleGoalLimit ? total : 0
+}
+
+function summaryItem(key, label, priority, tasks) {
+  if (tasks.length === 0) return null
+  return {
+    key,
+    label,
+    priority,
+    title: tasks[0].goal.name,
+    count: tasks.length
+  }
 }
 
 function goalsForDate(day) {
@@ -1418,6 +1886,33 @@ function goalsForDate(day) {
     .filter((item) => item.goal.startDate <= day && item.goal.endDate >= day)
     .filter((item) => goalOccursOnDate(item.goal, day))
     .sort((left, right) => priorityRank(right.goal.priority) - priorityRank(left.goal.priority))
+}
+
+function tasksForDate(day) {
+  if (!day) return []
+  return goalsForDate(day).map((item) => ({
+    ...item,
+    checkIn: checkInForGoalDate(item.goal.id, day)
+  }))
+}
+
+function checkInForGoalDate(goalId, day) {
+  return calendarCheckIns.value.find((item) => item.goalId === goalId && item.checkDate === day)
+}
+
+function taskCheckStatusLabel(item) {
+  if (!item.checkIn) return '未打卡'
+  return item.checkIn.makeup ? '已补卡' : '已打卡'
+}
+
+function taskCheckTagType(item) {
+  if (!item.checkIn) return 'info'
+  return item.checkIn.makeup ? 'warning' : 'success'
+}
+
+function openCalendarDay(day) {
+  selectedCalendarDate.value = day
+  calendarDialogVisible.value = true
 }
 
 function goalOccursOnDate(goal, day) {

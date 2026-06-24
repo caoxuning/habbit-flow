@@ -47,21 +47,19 @@ def seed_circles(db: Session):
 
 
 def expected_count(goal: Goal, today: date | None = None) -> int:
-    today = today or date.today()
-    end = min(goal.end_date, today)
-    if end < goal.start_date:
+    if goal.end_date < goal.start_date:
         return 0
-    days = (end - goal.start_date).days + 1
+    days = (goal.end_date - goal.start_date).days + 1
     if goal.cycle == "WEEKLY":
         count = 0
         current = goal.start_date
-        while current <= end:
+        while current <= goal.end_date:
             if current.weekday() == 0:
                 count += 1
             current = current.fromordinal(current.toordinal() + 1)
         occurrences = max(1, count)
     elif goal.cycle == "MONTHLY":
-        occurrences = (end.year - goal.start_date.year) * 12 + end.month - goal.start_date.month + 1
+        occurrences = (goal.end_date.year - goal.start_date.year) * 12 + goal.end_date.month - goal.start_date.month + 1
     else:
         occurrences = days
     return occurrences * goal.daily_target_count

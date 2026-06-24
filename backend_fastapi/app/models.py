@@ -63,6 +63,18 @@ class UserBadge(Base):
     obtained_time: Mapped[object] = mapped_column(DateTime, nullable=False)
 
 
+class Notification(Base):
+    __tablename__ = "notification"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
+    type: Mapped[str] = mapped_column(String(50), nullable=False)
+    title: Mapped[str] = mapped_column(String(120), nullable=False)
+    content: Mapped[str] = mapped_column(String(500), nullable=False)
+    is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    create_time: Mapped[object] = mapped_column(DateTime, nullable=False)
+
+
 class Friendship(Base):
     __tablename__ = "friendship"
 
@@ -113,6 +125,9 @@ class CirclePost(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     circle_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("social_circle.id"), nullable=False)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
+    check_in_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("check_in.id"))
+    visibility: Mapped[str] = mapped_column(String(20), nullable=False, default="PUBLIC")
+    post_type: Mapped[str] = mapped_column(String(30), nullable=False, default="NORMAL")
     content: Mapped[str] = mapped_column(String(1000), nullable=False)
     create_time: Mapped[object] = mapped_column(DateTime, nullable=False)
 

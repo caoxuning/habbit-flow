@@ -80,7 +80,7 @@ CREATE TABLE user_badge (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- -----------------------------------------------------------
--- 6. 消息提醒表（待实现）
+-- 6. 消息提醒表
 -- -----------------------------------------------------------
 CREATE TABLE notification (
     id          BIGINT       PRIMARY KEY AUTO_INCREMENT,
@@ -92,7 +92,7 @@ CREATE TABLE notification (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- -----------------------------------------------------------
--- 7. 好友关系表（待实现）
+-- 7. 好友关系表
 -- -----------------------------------------------------------
 CREATE TABLE friendship (
     id            BIGINT      PRIMARY KEY AUTO_INCREMENT,
@@ -105,7 +105,7 @@ CREATE TABLE friendship (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- -----------------------------------------------------------
--- 8. 打卡圈子表（待实现）
+-- 8. 打卡圈子表
 -- -----------------------------------------------------------
 CREATE TABLE social_circle (
     id          BIGINT       PRIMARY KEY AUTO_INCREMENT,
@@ -118,7 +118,7 @@ CREATE TABLE social_circle (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- -----------------------------------------------------------
--- 9. 圈子成员表（待实现）
+-- 9. 圈子成员表
 -- -----------------------------------------------------------
 CREATE TABLE circle_member (
     id         BIGINT   PRIMARY KEY AUTO_INCREMENT,
@@ -130,7 +130,7 @@ CREATE TABLE circle_member (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- -----------------------------------------------------------
--- 10. 圈子帖子表（待实现）
+-- 10. 圈子帖子表
 -- -----------------------------------------------------------
 CREATE TABLE circle_post (
     id          BIGINT   PRIMARY KEY AUTO_INCREMENT,

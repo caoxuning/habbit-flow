@@ -49,6 +49,7 @@ class CircleRequest(BaseModel):
 
 class CirclePostRequest(BaseModel):
     content: str = Field(min_length=1)
+    visibility: str | None = None
 
 
 class PostCommentRequest(BaseModel):
@@ -57,6 +58,15 @@ class PostCommentRequest(BaseModel):
 
 class DirectMessageRequest(BaseModel):
     content: str = Field(min_length=1)
+
+
+class CheckInShareRequest(BaseModel):
+    checkInId: int
+    content: str = Field(min_length=1)
+    visibility: str = "PUBLIC"
+    circleId: int | None = None
+    shareToFriends: bool = True
+    friendIds: list[int] | None = None
 
 
 def user_profile(user):
@@ -113,6 +123,17 @@ def badge_dict(badge, obtained_time: datetime | None = None):
     if obtained_time is not None:
         data["obtainedTime"] = obtained_time
     return data
+
+
+def notification_dict(notification):
+    return {
+        "id": notification.id,
+        "type": notification.type,
+        "title": notification.title,
+        "content": notification.content,
+        "read": notification.is_read,
+        "createTime": notification.create_time,
+    }
 
 
 def user_summary(user, friendship_status: str | None = None):
@@ -178,6 +199,9 @@ def circle_post_dict(post, circle, author, like_count: int = 0, comment_count: i
         "circleId": circle.id,
         "circleName": circle.name,
         "author": user_summary(author),
+        "checkInId": post.check_in_id,
+        "visibility": post.visibility,
+        "postType": post.post_type,
         "content": post.content,
         "likeCount": like_count,
         "commentCount": comment_count,
