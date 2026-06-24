@@ -626,12 +626,12 @@
           </section>
         </div>
 
-        <div v-if="socialTab === 'circles'" class="circle-workspace">
-          <section class="panel circle-sidebar">
-            <div class="panel-head">
+        <div v-if="socialTab === 'circles'" class="circle-workspace community-layout">
+          <aside class="circle-rail">
+            <div class="circle-rail-head">
               <div>
                 <h3>圈子广场</h3>
-                <p class="panel-copy">选择圈子查看成员动态。</p>
+                <p>{{ joinedCircles.length }} 个已加入</p>
               </div>
               <el-icon><Medal /></el-icon>
             </div>
@@ -647,47 +647,57 @@
                 </el-button>
                 <small>{{ circle.memberCount }} 人</small>
               </article>
+              <el-empty v-if="circles.length === 0" description="暂无圈子" />
             </div>
-          </section>
 
-          <section class="panel circle-composer">
-            <div class="panel-head">
-              <div>
-                <h3>发布动态</h3>
-                <p class="panel-copy">{{ selectedCircle ? `发布到 ${selectedCircle.name}` : '先选择一个圈子' }}</p>
-              </div>
-              <el-icon><Edit /></el-icon>
-            </div>
-            <el-input v-model="postForm.content" type="textarea" :rows="4" placeholder="分享今天的打卡进展，例如跑步、背单词、阅读笔记" />
-            <el-button class="post-button" type="primary" :icon="Edit" :disabled="!selectedCircleId" @click="publishPost">发布动态</el-button>
+            <el-collapse class="circle-create" accordion>
+              <el-collapse-item title="创建新圈子" name="create">
+                <el-form :model="circleForm" label-position="top">
+                  <el-form-item label="圈子名称">
+                    <el-input v-model="circleForm.name" placeholder="英语打卡圈" />
+                  </el-form-item>
+                  <el-form-item label="圈子简介">
+                    <el-input v-model="circleForm.description" type="textarea" :rows="2" />
+                  </el-form-item>
+                  <el-form-item label="图标标识">
+                    <el-input v-model="circleForm.icon" placeholder="READ" />
+                  </el-form-item>
+                  <el-button class="full-button" type="primary" :icon="Plus" @click="createCircle">创建圈子</el-button>
+                </el-form>
+              </el-collapse-item>
+            </el-collapse>
+          </aside>
 
-            <el-divider />
-
-            <div class="panel-head compact">
-              <h3>创建圈子</h3>
-              <el-icon><Plus /></el-icon>
-            </div>
-            <el-form :model="circleForm" label-position="top">
-              <el-form-item label="圈子名称">
-                <el-input v-model="circleForm.name" placeholder="英语打卡圈" />
-              </el-form-item>
-              <el-form-item label="圈子简介">
-                <el-input v-model="circleForm.description" type="textarea" :rows="3" />
-              </el-form-item>
-              <el-form-item label="图标标识">
-                <el-input v-model="circleForm.icon" placeholder="READ" />
-              </el-form-item>
-              <el-button type="primary" :icon="Plus" @click="createCircle">创建圈子</el-button>
-            </el-form>
-          </section>
-
-          <section class="panel social-wide circle-feed-panel">
-            <div class="panel-head">
+          <section class="panel circle-feed-panel community-feed">
+            <div class="community-cover">
               <div>
                 <h3>{{ selectedCircle ? selectedCircle.name : '圈子帖子' }}</h3>
                 <p class="panel-copy">{{ selectedCircle?.description || '选择一个圈子查看动态。' }}</p>
               </div>
-              <el-icon><Calendar /></el-icon>
+              <div class="community-cover-stats">
+                <span><strong>{{ selectedCircle?.memberCount || 0 }}</strong>成员</span>
+                <span><strong>{{ circlePosts.length }}</strong>动态</span>
+              </div>
+            </div>
+
+            <div class="feed-composer">
+              <div class="avatar-sm">{{ profileInitial }}</div>
+              <div class="feed-composer-main">
+                <el-input v-model="postForm.content" type="textarea" :rows="3" placeholder="分享今天的打卡进展，例如跑步、背单词、阅读笔记" />
+                <div class="feed-composer-actions">
+                  <el-tag v-if="selectedCircle" effect="plain">{{ selectedCircle.name }}</el-tag>
+                  <el-tag v-else type="info" effect="plain">未选择圈子</el-tag>
+                  <el-button type="primary" :icon="Edit" :disabled="!selectedCircle?.joined" @click="publishPost">发布动态</el-button>
+                </div>
+              </div>
+            </div>
+
+            <div class="feed-heading">
+              <div>
+                <h3>最新动态</h3>
+                <p>{{ selectedCircle ? selectedCircle.name : '全部圈子' }}</p>
+              </div>
+              <el-button text :icon="Refresh" :disabled="!selectedCircleId" @click="loadCirclePosts(selectedCircleId)">刷新</el-button>
             </div>
             <div class="post-list">
               <article v-for="post in circlePosts" :key="post.id" class="post-item">
@@ -725,6 +735,51 @@
               <el-empty v-if="circlePosts.length === 0" description="选择一个圈子查看或发布动态" />
             </div>
           </section>
+
+          <aside class="community-aside">
+            <section class="panel community-summary">
+              <div class="panel-head">
+                <div>
+                  <h3>我的圈子</h3>
+                  <p class="panel-copy">{{ joinedCircles.length }} 个圈子正在关注</p>
+                </div>
+                <el-icon><Calendar /></el-icon>
+              </div>
+              <div class="joined-circle-list">
+                <button
+                  v-for="circle in joinedCircles"
+                  :key="circle.id"
+                  class="joined-circle"
+                  :class="{ active: selectedCircleId === circle.id }"
+                  type="button"
+                  @click="selectCircle(circle)"
+                >
+                  <span class="circle-icon">{{ circle.icon || 'TAG' }}</span>
+                  <span>
+                    <strong>{{ circle.name }}</strong>
+                    <small>{{ circle.memberCount }} 人</small>
+                  </span>
+                </button>
+                <el-empty v-if="joinedCircles.length === 0" description="尚未加入圈子" />
+              </div>
+            </section>
+
+            <section class="panel community-summary">
+              <div class="panel-head">
+                <div>
+                  <h3>社区动态</h3>
+                  <p class="panel-copy">{{ feedPosts.length }} 条汇总动态</p>
+                </div>
+                <el-icon><Bell /></el-icon>
+              </div>
+              <article v-for="post in feedPosts.slice(0, 3)" :key="post.id" class="feed-mini-post" @click="socialTab = 'feed'">
+                <strong>{{ post.author.username }} · {{ post.circleName }}</strong>
+                <p>{{ post.content }}</p>
+              </article>
+              <el-empty v-if="feedPosts.length === 0" description="暂无动态" />
+              <el-button class="full-button" @click="socialTab = 'feed'">查看全部动态</el-button>
+            </section>
+          </aside>
         </div>
 
         <section v-if="socialTab === 'feed'" class="panel feed-panel">
@@ -1167,6 +1222,7 @@ const selectedCalendarStats = computed(() => {
 })
 const selectedChatFriend = computed(() => friends.value.find((friend) => friend.id === selectedChatFriendId.value))
 const selectedCircle = computed(() => circles.value.find((circle) => circle.id === selectedCircleId.value))
+const joinedCircles = computed(() => circles.value.filter((circle) => circle.joined))
 const profileInitial = computed(() => (profile.value?.username || 'H').slice(0, 1).toUpperCase())
 
 onMounted(() => {
