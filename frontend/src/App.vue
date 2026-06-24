@@ -1,139 +1,280 @@
 <template>
   <section v-if="!token" class="auth-shell">
-    <div class="auth-panel">
-      <div>
-        <p class="eyebrow">HabitFlow</p>
-        <h1>自律目标追踪平台</h1>
-        <p class="auth-copy">管理目标、记录每日打卡、查看成长趋势，并在连续坚持中获得勋章。</p>
+    <div class="auth-stage">
+      <div class="auth-panel">
+        <div class="auth-heading">
+          <p class="eyebrow">HabitFlow</p>
+          <h1>自律目标追踪平台</h1>
+          <p class="auth-copy">管理目标、记录每日打卡、查看成长趋势，并在连续坚持中获得勋章。</p>
+        </div>
+        <el-tabs v-model="authMode" stretch>
+          <el-tab-pane label="登录" name="login" />
+          <el-tab-pane label="注册" name="register" />
+        </el-tabs>
+        <el-form ref="authFormRef" :model="authForm" :rules="authRules" label-position="top" @submit.prevent>
+          <el-form-item label="用户名" prop="username">
+            <el-input v-model="authForm.username" :prefix-icon="User" />
+          </el-form-item>
+          <el-form-item label="密码" prop="password">
+            <el-input v-model="authForm.password" type="password" show-password :prefix-icon="Lock" />
+          </el-form-item>
+          <el-form-item v-if="authMode === 'register'" label="邮箱" prop="email">
+            <el-input v-model="authForm.email" />
+          </el-form-item>
+          <el-button type="primary" class="full-button auth-submit" :loading="authLoading" @click="submitAuth">
+            {{ authMode === 'login' ? '登录' : '注册并登录' }}
+          </el-button>
+        </el-form>
+        <div class="auth-demo-strip">
+          <span>演示账号</span>
+          <strong>member3 / 123456</strong>
+        </div>
       </div>
-      <el-tabs v-model="authMode" stretch>
-        <el-tab-pane label="登录" name="login" />
-        <el-tab-pane label="注册" name="register" />
-      </el-tabs>
-      <el-form ref="authFormRef" :model="authForm" :rules="authRules" label-position="top" @submit.prevent>
-        <el-form-item label="用户名" prop="username">
-          <el-input v-model="authForm.username" :prefix-icon="User" />
-        </el-form-item>
-        <el-form-item label="密码" prop="password">
-          <el-input v-model="authForm.password" type="password" show-password :prefix-icon="Lock" />
-        </el-form-item>
-        <el-form-item v-if="authMode === 'register'" label="邮箱" prop="email">
-          <el-input v-model="authForm.email" />
-        </el-form-item>
-        <el-button type="primary" class="full-button" :loading="authLoading" @click="submitAuth">
-          {{ authMode === 'login' ? '登录' : '注册并登录' }}
-        </el-button>
-      </el-form>
+
+      <aside class="auth-reveal-panel">
+        <div class="auth-reveal-head">
+          <span>HabitFlow Services</span>
+          <p>把每天的运动、英语和同伴监督放进一个可持续的节奏里。</p>
+        </div>
+        <div class="reveal-list">
+          <article v-for="item in authRevealItems" :key="item.text" class="reveal-item">
+            <h2>{{ item.text }}</h2>
+            <div class="reveal-image reveal-image-back">
+              <img :src="item.images[1].src" :alt="item.images[1].alt" />
+            </div>
+            <div class="reveal-image reveal-image-front">
+              <img :src="item.images[0].src" :alt="item.images[0].alt" />
+            </div>
+          </article>
+        </div>
+      </aside>
     </div>
   </section>
 
-  <section v-else class="app-shell">
-    <aside class="sidebar">
-      <div class="brand">
-        <span class="brand-mark">HF</span>
-        <div>
-          <strong>HabitFlow</strong>
-          <small>{{ profile?.username }}</small>
+  <section v-else class="app-shell top-nav-shell">
+    <header class="app-navbar">
+      <div class="app-nav-inner">
+        <button class="nav-brand spot-nav-button" type="button" @pointermove="updateNavSpot" @click="selectView('dashboard')">
+          <span class="brand-mark">HF</span>
+          <span>
+            <strong>HabitFlow</strong>
+            <small>{{ profile?.username }}</small>
+          </span>
+        </button>
+
+        <nav class="nav-menu" aria-label="主导航">
+          <button
+            class="nav-link spot-nav-button"
+            :class="{ active: activeView === 'dashboard' }"
+            type="button"
+            @pointermove="updateNavSpot"
+            @click="selectView('dashboard')"
+          >
+            <span>工作台</span>
+          </button>
+          <template v-for="group in navGroups" :key="group.title">
+            <button
+              v-if="group.items.length === 1"
+              class="nav-link spot-nav-button"
+              :class="{ active: group.items[0].view === activeView }"
+              type="button"
+              @pointermove="updateNavSpot"
+              @click="selectView(group.items[0].view)"
+            >
+              <span>{{ group.title }}</span>
+            </button>
+            <el-dropdown v-else trigger="hover" popper-class="nav-dropdown">
+              <button class="nav-link spot-nav-button" :class="{ active: group.items.some((item) => item.view === activeView) }" type="button" @pointermove="updateNavSpot">
+                <span>{{ group.title }}</span>
+              </button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item
+                    v-for="item in group.items"
+                    :key="item.view"
+                    @click="selectView(item.view)"
+                  >
+                    <div class="nav-dropdown-item">
+                      <strong>{{ item.title }}</strong>
+                      <small>{{ item.description }}</small>
+                    </div>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </template>
+        </nav>
+
+        <div class="nav-actions">
+          <span class="nav-stat">{{ activeGoalRows.length }} 个进行中目标</span>
+          <button class="nav-stat nav-stat-button spot-nav-button" type="button" @pointermove="updateNavSpot" @click="selectView('notifications')">
+            <span>{{ notificationUnreadCount }} 条未读提醒</span>
+          </button>
+          <el-badge v-if="notificationUnreadCount > 0" :value="notificationUnreadCount">
+            <el-button :icon="Bell" circle @click="selectView('notifications')" />
+          </el-badge>
+          <el-button :icon="Refresh" circle @click="loadAll" />
+          <el-button class="desktop-only" :icon="SwitchButton" @click="logout">退出</el-button>
+          <button class="mobile-menu-button spot-nav-button" type="button" aria-label="打开菜单" @pointermove="updateNavSpot" @click="mobileNavOpen = true"><span>☰</span></button>
         </div>
       </div>
-      <el-menu :default-active="activeView" @select="activeView = $event">
-        <el-menu-item index="dashboard">
-          <el-icon><DataAnalysis /></el-icon>
-          <span>数据概览</span>
-        </el-menu-item>
-        <el-menu-item index="calendar">
-          <el-icon><Calendar /></el-icon>
-          <span>任务日历</span>
-        </el-menu-item>
-        <el-menu-item index="goals">
-          <el-icon><Aim /></el-icon>
-          <span>目标管理</span>
-        </el-menu-item>
-        <el-menu-item index="checkins">
-          <el-icon><Calendar /></el-icon>
-          <span>打卡记录</span>
-        </el-menu-item>
-        <el-menu-item index="timeline">
-          <el-icon><Timer /></el-icon>
-          <span>成长日志</span>
-        </el-menu-item>
-        <el-menu-item index="notifications">
-          <el-icon><Bell /></el-icon>
-          <span>消息提醒</span>
-          <el-badge v-if="notificationUnreadCount > 0" :value="notificationUnreadCount" class="menu-badge" />
-        </el-menu-item>
-        <el-menu-item index="badges">
-          <el-icon><Medal /></el-icon>
-          <span>勋章奖励</span>
-        </el-menu-item>
-        <el-menu-item index="social">
-          <el-icon><Bell /></el-icon>
-          <span>社交圈子</span>
-        </el-menu-item>
-        <el-menu-item index="profile">
-          <el-icon><User /></el-icon>
-          <span>个人信息</span>
-        </el-menu-item>
-      </el-menu>
-      <el-button class="logout" :icon="SwitchButton" @click="logout">退出登录</el-button>
-    </aside>
+
+      <transition name="mobile-nav-fade">
+        <div v-if="mobileNavOpen" class="mobile-nav-layer" @click.self="mobileNavOpen = false">
+          <aside class="mobile-nav-panel">
+            <div class="mobile-nav-head">
+              <div class="nav-brand compact">
+                <span class="brand-mark">HF</span>
+                <span>
+                  <strong>HabitFlow</strong>
+                  <small>{{ profile?.username }}</small>
+                </span>
+              </div>
+              <button type="button" class="mobile-nav-close spot-nav-button" @pointermove="updateNavSpot" @click="mobileNavOpen = false"><span>x</span></button>
+            </div>
+            <button class="mobile-nav-link spot-nav-button" type="button" @pointermove="updateNavSpot" @click="selectView('dashboard')"><span>工作台</span></button>
+            <section v-for="group in navGroups" :key="group.title" class="mobile-nav-group">
+              <strong>{{ group.title }}</strong>
+              <button
+                v-for="item in group.items"
+                :key="item.view"
+                class="mobile-nav-link spot-nav-button"
+                type="button"
+                @pointermove="updateNavSpot"
+                @click="selectView(item.view)"
+              >
+                <span>{{ item.title }}</span>
+                <small>{{ item.description }}</small>
+              </button>
+            </section>
+            <el-button class="full-button" :icon="SwitchButton" @click="logout">退出登录</el-button>
+          </aside>
+        </div>
+      </transition>
+    </header>
 
     <main class="workspace">
-      <header class="topbar">
-        <div>
-          <h2>{{ viewTitle }}</h2>
-          <p>{{ viewSubtitle }}</p>
-        </div>
-        <div class="top-actions">
-          <el-button v-if="activeView === 'checkins'" :icon="Download" @click="exportCheckIns">导出打卡记录</el-button>
-          <el-button :icon="Refresh" @click="loadAll">刷新</el-button>
-        </div>
-      </header>
+      <div v-if="activeView === 'dashboard'" class="dashboard dashboard-workspace">
+        <aside class="dashboard-side-panel panel">
+          <div class="dashboard-side-head">
+            <span>今日工作台</span>
+            <h3>{{ greetingText }}，{{ profile?.username || 'HabitFlow 用户' }}</h3>
+            <p>{{ todayFocusText }}</p>
+          </div>
+          <div class="focus-meter dashboard-meter" :style="{ '--focus-progress': todayProgressStyle }">
+            <strong>{{ todayProgress }}%</strong>
+            <span>今日完成</span>
+          </div>
+          <div class="dashboard-side-stats">
+            <article>
+              <strong>{{ todayDoneCount }}/{{ todayGoals.length }}</strong>
+              <span>今日打卡</span>
+            </article>
+            <article>
+              <strong>{{ dashboard?.currentStreakDays ?? 0 }}</strong>
+              <span>连续天数</span>
+            </article>
+            <article>
+              <strong>{{ dashboard?.totalCheckIns ?? 0 }}</strong>
+              <span>累计打卡</span>
+            </article>
+          </div>
+          <div class="dashboard-action-list compact">
+            <button type="button" class="spot-nav-button" @pointermove="updateNavSpot" @click="activeView = 'checkins'">
+              <strong>快速打卡</strong>
+              <span>提交今日记录</span>
+            </button>
+            <button type="button" class="spot-nav-button" @pointermove="updateNavSpot" @click="activeView = 'calendar'">
+              <strong>任务日历</strong>
+              <span>查看今日安排</span>
+            </button>
+            <button type="button" class="spot-nav-button" @pointermove="updateNavSpot" @click="activeView = 'social'">
+              <strong>好友监督</strong>
+              <span>查看同伴进展</span>
+            </button>
+          </div>
+        </aside>
 
-      <div v-if="activeView === 'dashboard'" class="dashboard">
-        <div class="metric-grid">
-          <div v-for="item in metrics" :key="item.label" class="metric-card">
-            <span>{{ item.label }}</span>
-            <strong>{{ item.value }}</strong>
-          </div>
-        </div>
-        <div class="chart-grid">
-          <section class="panel">
+        <section class="dashboard-main">
+          <section class="panel dashboard-today-card">
             <div class="panel-head">
-              <h3>月度成长报表</h3>
-              <el-icon><DataAnalysis /></el-icon>
-            </div>
-            <div ref="monthlyChartRef" class="chart"></div>
-          </section>
-          <section class="panel">
-            <div class="panel-head">
-              <h3>目标完成率</h3>
-              <el-icon><Aim /></el-icon>
-            </div>
-            <div ref="rateChartRef" class="chart"></div>
-          </section>
-        </div>
-        <section class="panel timeline-preview">
-          <div class="panel-head">
-            <h3>成长日志预览</h3>
-            <el-button size="small" text @click="activeView = 'timeline'">查看全部</el-button>
-          </div>
-          <el-timeline v-if="timelineList.length > 0">
-            <el-timeline-item
-              v-for="item in timelineList.slice(0, 7)"
-              :key="item.date"
-              :timestamp="item.date"
-              placement="top"
-            >
-              <div v-for="evt in item.events" :key="evt.time || evt.badgeName || evt.content">
-                <div v-if="evt.type === 'checkin'" style="margin-bottom: 4px;">
-                  <strong>{{ evt.goalName }}</strong>
-                  <p v-if="evt.remark" style="margin: 2px 0;">{{ evt.remark }}</p>
-                </div>
+              <div>
+                <h3>今日打卡</h3>
+                <p class="panel-copy">按今天的目标查看完成情况。</p>
               </div>
-            </el-timeline-item>
-          </el-timeline>
-          <el-empty v-else description="暂无成长记录" />
+              <el-button size="small" type="primary" :icon="Check" @click="activeView = 'checkins'">去打卡</el-button>
+            </div>
+            <div class="dashboard-task-list">
+              <article
+                v-for="item in todayGoals"
+                :key="item.goal.id"
+                class="dashboard-task-row"
+                :class="[priorityClass(item.goal.priority), { done: checkInForGoalDate(item.goal.id, new Date().toISOString().slice(0, 10)) }]"
+              >
+                <div>
+                  <strong>{{ item.goal.name }}</strong>
+                  <span>{{ item.goal.type }} · {{ cycleLabel(item.goal.cycle) }} · {{ priorityLabel(item.goal.priority) }}</span>
+                </div>
+                <el-tag :type="checkInForGoalDate(item.goal.id, new Date().toISOString().slice(0, 10)) ? 'success' : 'warning'">
+                  {{ checkInForGoalDate(item.goal.id, new Date().toISOString().slice(0, 10)) ? '已打卡' : '待打卡' }}
+                </el-tag>
+                <el-button size="small" :disabled="!!checkInForGoalDate(item.goal.id, new Date().toISOString().slice(0, 10))" @click="quickCheckIn(item.goal)">
+                  打卡
+                </el-button>
+              </article>
+              <el-empty v-if="todayGoals.length === 0" description="今天暂无目标" />
+            </div>
+          </section>
+
+          <section class="panel dashboard-rank-card">
+            <div class="panel-head">
+              <div>
+                <h3>打卡排行榜</h3>
+                <p class="panel-copy">好友和圈子的累计打卡排名。</p>
+              </div>
+              <el-button size="small" text @click="activeView = 'social'; socialTab = 'leaderboard'">查看全部</el-button>
+            </div>
+            <div class="dashboard-rank-grid">
+              <div class="dashboard-rank-section">
+                <span class="dashboard-section-label">好友</span>
+                <article v-for="item in friendLeaderboard.slice(0, 4)" :key="item.user.id" class="dashboard-rank-row" :class="{ mine: item.isMe }">
+                  <span>{{ item.rank }}</span>
+                  <strong>{{ item.user.username }}</strong>
+                  <small>{{ item.checkInCount }} 次</small>
+                </article>
+                <el-empty v-if="friendLeaderboard.length === 0" description="暂无好友排行" />
+              </div>
+              <div class="dashboard-rank-section">
+                <span class="dashboard-section-label">圈子</span>
+                <article v-for="item in circleLeaderboard.slice(0, 4)" :key="item.circle.id" class="dashboard-rank-row">
+                  <span>{{ item.rank }}</span>
+                  <strong>{{ item.circle.name }}</strong>
+                  <small>{{ item.checkInCount }} 次</small>
+                </article>
+                <el-empty v-if="circleLeaderboard.length === 0" description="暂无圈子排行" />
+              </div>
+            </div>
+          </section>
+
+          <section class="panel dashboard-activity-card">
+            <div class="panel-head">
+              <div>
+                <h3>最近打卡</h3>
+                <p class="panel-copy">查看最近完成的目标记录。</p>
+              </div>
+              <el-button size="small" text @click="activeView = 'timeline'">成长日志</el-button>
+            </div>
+            <div class="dashboard-activity-list">
+              <article v-for="item in checkIns.slice(0, 8)" :key="item.id" class="dashboard-activity-row">
+                <div>
+                  <strong>{{ item.goalName || goalName(item.goalId) }}</strong>
+                  <span>{{ item.checkDate }} · {{ item.remark || '已完成打卡' }}</span>
+                </div>
+                <el-tag size="small" :type="item.makeup ? 'warning' : 'success'">{{ item.makeup ? '补卡' : '打卡' }}</el-tag>
+              </article>
+              <el-empty v-if="checkIns.length === 0" description="暂无打卡记录" />
+            </div>
+          </section>
         </section>
       </div>
 
@@ -294,7 +435,7 @@
         <section class="panel">
           <div class="panel-head">
             <h3>打卡记录</h3>
-            <el-icon><Calendar /></el-icon>
+            <el-button :icon="Download" @click="exportCheckIns">导出打卡记录</el-button>
           </div>
           <div class="record-tools">
             <el-select v-model="recordFilters.goalId" clearable placeholder="全部目标" @change="loadCheckIns">
@@ -435,26 +576,24 @@
         <el-empty v-if="badges.length === 0" description="完成首次打卡即可获得第一枚勋章" />
       </div>
 
-      <div v-if="activeView === 'social'" class="social-space">
-        <section class="social-hero">
-          <div>
-            <h3>社交圈子</h3>
-            <p>和好友互相提醒，在圈子里记录运动、英语和阅读进展。</p>
-          </div>
-          <div class="social-stats">
-            <span><strong>{{ friends.length }}</strong>好友</span>
-            <span><strong>{{ circles.length }}</strong>圈子</span>
-            <span><strong>{{ feedPosts.length }}</strong>动态</span>
-          </div>
-        </section>
+      <div v-if="activeView === 'social'" class="social-space social-workspace">
+        <aside class="social-side-nav" aria-label="社交模块导航">
+          <button
+            v-for="item in socialTabs"
+            :key="item.name"
+            class="social-side-link spot-nav-button"
+            :class="{ active: socialTab === item.name }"
+            type="button"
+            @pointermove="updateNavSpot"
+            @click="openSocialSection(item.name)"
+          >
+            <span>{{ item.kicker }}</span>
+            <strong>{{ item.label }}</strong>
+            <small>{{ item.description }}</small>
+          </button>
+        </aside>
 
-        <el-tabs v-model="socialTab" class="social-tabs">
-          <el-tab-pane label="好友管理" name="friends" />
-          <el-tab-pane label="好友聊天" name="chat" />
-          <el-tab-pane label="圈子广场" name="circles" />
-          <el-tab-pane label="社区动态" name="feed" />
-        </el-tabs>
-
+        <section class="social-content">
         <div v-if="socialTab === 'friends'" class="friends-dashboard">
           <section class="panel social-wide friend-checkin-board">
             <div class="panel-head">
@@ -483,6 +622,27 @@
               </article>
               <el-empty v-if="friendCheckinBoard.length === 0" description="添加好友后即可查看今日打卡状态" />
             </div>
+
+            <div class="friend-directory-inline">
+              <div class="panel-head compact">
+                <div>
+                  <h3>好友列表</h3>
+                  <p class="panel-copy">点击聊天进入会话。</p>
+                </div>
+                <el-icon><User /></el-icon>
+              </div>
+              <div class="friend-list">
+                <article v-for="friend in friends" :key="friend.id" class="friend-card">
+                  <div class="avatar-sm">{{ userInitial(friend) }}</div>
+                  <div>
+                    <strong>{{ friend.username }}</strong>
+                    <span>{{ friend.email || '未填写邮箱' }}</span>
+                  </div>
+                  <el-button size="small" type="primary" @click="openChat(friend)">聊天</el-button>
+                </article>
+                <el-empty v-if="friends.length === 0" description="搜索用户并发送好友申请" />
+              </div>
+            </div>
           </section>
 
           <section class="panel friend-search-panel">
@@ -497,7 +657,7 @@
               <el-input v-model="userKeyword" placeholder="输入用户名关键词" clearable @keyup.enter="searchUsers" />
               <el-button type="primary" :icon="Refresh" @click="searchUsers">搜索</el-button>
             </div>
-            <el-table :data="socialUsers" height="280" stripe>
+            <el-table class="fill-table" :data="socialUsers" height="100%" stripe>
               <el-table-column prop="username" label="用户名" min-width="130" />
               <el-table-column prop="email" label="邮箱" min-width="160" />
               <el-table-column label="状态" width="100">
@@ -523,7 +683,7 @@
               </div>
               <el-icon><Bell /></el-icon>
             </div>
-            <el-table :data="friendRequests" height="280" stripe>
+            <el-table class="fill-table" :data="friendRequests" height="100%" stripe>
               <el-table-column label="申请人" min-width="120">
                 <template #default="{ row }">{{ row.requester.username }}</template>
               </el-table-column>
@@ -542,26 +702,6 @@
             </el-table>
           </section>
 
-          <section class="panel social-wide friend-directory">
-            <div class="panel-head">
-              <div>
-                <h3>好友列表</h3>
-                <p class="panel-copy">点击聊天进入会话。</p>
-              </div>
-              <el-icon><User /></el-icon>
-            </div>
-            <div class="friend-list">
-              <article v-for="friend in friends" :key="friend.id" class="friend-card">
-                <div class="avatar-sm">{{ userInitial(friend) }}</div>
-                <div>
-                  <strong>{{ friend.username }}</strong>
-                  <span>{{ friend.email || '未填写邮箱' }}</span>
-                </div>
-                <el-button size="small" type="primary" @click="openChat(friend)">聊天</el-button>
-              </article>
-              <el-empty v-if="friends.length === 0" description="搜索用户并发送好友申请" />
-            </div>
-          </section>
         </div>
 
         <div v-if="socialTab === 'chat'" class="chat-layout">
@@ -604,12 +744,17 @@
               <article
                 v-for="message in chatMessages"
                 :key="message.id"
-                class="message-bubble"
+                class="message-row"
                 :class="{ mine: message.sender.id === profile?.id }"
               >
-                <strong>{{ message.sender.id === profile?.id ? '我' : message.sender.username }}</strong>
-                <p>{{ message.content }}</p>
-                <small>{{ formatTime(message.createTime) }}</small>
+                <div class="message-avatar">{{ message.sender.id === profile?.id ? profileInitial : userInitial(message.sender) }}</div>
+                <div class="message-stack">
+                  <div class="message-meta">
+                    <strong>{{ message.sender.id === profile?.id ? '我' : message.sender.username }}</strong>
+                    <time>{{ formatTime(message.createTime) }}</time>
+                  </div>
+                  <p class="message-content">{{ message.content }}</p>
+                </div>
               </article>
               <el-empty v-if="selectedChatFriendId && chatMessages.length === 0" description="还没有聊天记录" />
               <el-empty v-if="!selectedChatFriendId" description="从左侧选择一个好友" />
@@ -783,12 +928,12 @@
         </div>
 
         <section v-if="socialTab === 'feed'" class="panel feed-panel">
-          <div class="panel-head">
+          <div class="feed-heading">
             <div>
-              <h3>我的圈子动态</h3>
-              <p class="panel-copy">你加入的圈子动态会汇总在这里。</p>
+              <h3>社区动态</h3>
+              <p>你加入的圈子动态会汇总在这里。</p>
             </div>
-            <el-icon><Calendar /></el-icon>
+            <el-button text :icon="Refresh" @click="loadSocialData">刷新</el-button>
           </div>
           <div class="post-list">
             <article v-for="post in feedPosts" :key="post.id" class="post-item">
@@ -826,15 +971,96 @@
             <el-empty v-if="feedPosts.length === 0" description="加入圈子后即可查看动态流" />
           </div>
         </section>
+
+        <section v-if="socialTab === 'leaderboard'" class="leaderboard-workspace">
+          <section class="panel leaderboard-panel">
+            <div class="panel-head">
+              <div>
+                <h3>好友排行榜</h3>
+                <p class="panel-copy">按累计打卡次数排序。</p>
+              </div>
+              <el-icon><Medal /></el-icon>
+            </div>
+            <div class="leaderboard-list">
+              <article
+                v-for="item in friendLeaderboard"
+                :key="item.user.id"
+                class="leaderboard-row"
+                :class="{ podium: item.rank <= 3, mine: item.isMe }"
+              >
+                <span class="rank-number">{{ item.rank }}</span>
+                <div class="avatar-sm">{{ userInitial(item.user) }}</div>
+                <div class="leaderboard-main">
+                  <strong>{{ item.user.username }}</strong>
+                  <small>{{ item.isMe ? '我' : item.user.email || '好友' }}</small>
+                </div>
+                <div class="leaderboard-score">
+                  <strong>{{ item.checkInCount }}</strong>
+                  <span>次打卡</span>
+                </div>
+              </article>
+              <el-empty v-if="friendLeaderboard.length === 0" description="添加好友后即可查看排行" />
+            </div>
+          </section>
+
+          <section class="panel leaderboard-panel">
+            <div class="panel-head">
+              <div>
+                <h3>圈子排行榜</h3>
+                <p class="panel-copy">按圈子成员累计打卡次数排序。</p>
+              </div>
+              <el-icon><Medal /></el-icon>
+            </div>
+            <div class="leaderboard-list">
+              <article
+                v-for="item in circleLeaderboard"
+                :key="item.circle.id"
+                class="leaderboard-row circle"
+                :class="{ podium: item.rank <= 3 }"
+              >
+                <span class="rank-number">{{ item.rank }}</span>
+                <div class="circle-icon">{{ item.circle.icon || 'TAG' }}</div>
+                <div class="leaderboard-main">
+                  <strong>{{ item.circle.name }}</strong>
+                  <small>{{ item.circle.memberCount }} 人 · {{ item.circle.joined ? '已加入' : '未加入' }}</small>
+                </div>
+                <div class="leaderboard-score">
+                  <strong>{{ item.checkInCount }}</strong>
+                  <span>次打卡</span>
+                </div>
+              </article>
+              <el-empty v-if="circleLeaderboard.length === 0" description="暂无圈子排行" />
+            </div>
+          </section>
+        </section>
+        </section>
       </div>
 
-      <div v-if="activeView === 'profile'" class="profile-layout">
-        <section class="panel profile-card">
+      <div v-if="activeView === 'profile'" class="profile-layout profile-workspace">
+        <section class="panel profile-card profile-summary-card">
           <div class="profile-cover">
+            <div class="profile-particles" aria-hidden="true">
+              <i
+                v-for="particle in profileParticles"
+                :key="particle.id"
+                :style="{
+                  left: particle.left,
+                  top: particle.top,
+                  width: particle.size,
+                  height: particle.size,
+                  animationDelay: particle.delay,
+                  animationDuration: particle.duration
+                }"
+              ></i>
+            </div>
             <div class="profile-avatar">{{ profileInitial }}</div>
             <div>
               <h3>{{ profile?.username }}</h3>
               <p>{{ profile?.email || '暂未填写邮箱' }}</p>
+              <div class="profile-badges">
+                <span>协作账号</span>
+                <span>{{ dashboard?.currentStreakDays ?? 0 }} 天连续</span>
+              </div>
             </div>
           </div>
           <div class="profile-stats">
@@ -842,46 +1068,130 @@
             <span><strong>{{ dashboard?.totalCheckIns ?? 0 }}</strong>打卡</span>
             <span><strong>{{ dashboard?.currentStreakDays ?? 0 }}</strong>连续天数</span>
           </div>
+          <div class="profile-progress">
+            <div>
+              <span>自律完成率</span>
+              <strong>{{ dashboard?.averageCompletionRate ?? 0 }}%</strong>
+            </div>
+            <el-progress :percentage="dashboard?.averageCompletionRate ?? 0" :show-text="false" />
+          </div>
+          <div class="profile-summary-list">
+            <article>
+              <span>账号状态</span>
+              <strong>正常使用</strong>
+              <small>资料、目标和打卡记录会自动同步。</small>
+            </article>
+            <article>
+              <span>协作身份</span>
+              <strong>{{ profile?.username || 'HabitFlow 用户' }}</strong>
+              <small>可与好友互发提醒、评论圈子动态。</small>
+            </article>
+            <article>
+              <span>账号加入</span>
+              <strong>{{ profileActiveDays }} 天</strong>
+              <small>已获 {{ badges.length }} 枚勋章。</small>
+            </article>
+          </div>
         </section>
 
-        <section class="panel profile-settings">
-          <div class="panel-head">
-            <div>
-              <h3>账号资料</h3>
-              <p class="panel-copy">基础资料可以随时维护，安全操作会单独确认。</p>
+        <section class="profile-settings-stack">
+          <section class="panel profile-settings profile-primary">
+            <div class="panel-head">
+              <div>
+                <h3>基础资料</h3>
+                <p class="panel-copy">维护你在 HabitFlow 中展示的基本资料。</p>
+              </div>
+              <el-icon><User /></el-icon>
             </div>
-            <el-icon><User /></el-icon>
-          </div>
-          <el-form :model="profileForm" label-position="top">
-            <el-form-item label="用户名">
-              <el-input v-model="profileForm.username" />
-            </el-form-item>
-            <el-form-item label="邮箱">
-              <el-input v-model="profileForm.email" />
-            </el-form-item>
-            <el-form-item label="账号创建时间">
-              <el-input :model-value="formatDateTime(profile?.createTime)" disabled />
-            </el-form-item>
-            <el-button type="primary" @click="saveProfile">保存资料</el-button>
-          </el-form>
-        </section>
+            <el-form class="profile-form-grid" :model="profileForm" label-position="top">
+              <el-form-item label="用户名">
+                <el-input v-model="profileForm.username" />
+              </el-form-item>
+              <el-form-item label="邮箱">
+                <el-input v-model="profileForm.email" />
+              </el-form-item>
+              <el-form-item label="账号创建时间">
+                <el-input :model-value="formatDateTime(profile?.createTime)" disabled />
+              </el-form-item>
+              <el-form-item label="当前身份">
+                <el-input model-value="普通协作成员" disabled />
+              </el-form-item>
+              <div class="profile-form-actions">
+                <el-button type="primary" @click="saveProfile">保存资料</el-button>
+              </div>
+            </el-form>
+          </section>
 
-        <section class="panel security-card">
-          <div class="panel-head">
-            <div>
-              <h3>账号安全</h3>
-              <p class="panel-copy">修改密码属于敏感操作，进入弹窗后再填写原密码和新密码。</p>
+          <section class="panel account-status-card">
+            <div class="panel-head">
+              <div>
+                <h3>账号概览</h3>
+                <p class="panel-copy">查看你的协作、圈子和成长状态。</p>
+              </div>
+              <el-icon><DataAnalysis /></el-icon>
             </div>
-            <el-icon><Lock /></el-icon>
-          </div>
-          <div class="security-row">
-            <div>
-              <span>登录密码</span>
-              <strong>已加密保存</strong>
-              <small>建议定期更新密码，保护账号安全。</small>
+            <div class="account-health-grid">
+              <article>
+                <span>同步状态</span>
+                <strong>已同步</strong>
+                <small>你的最新记录已保存。</small>
+              </article>
+              <article>
+                <span>社交能力</span>
+                <strong>{{ friends.length }} 位好友</strong>
+                <small>可聊天、提醒和查看打卡状态。</small>
+              </article>
+              <article>
+                <span>圈子参与</span>
+                <strong>{{ joinedCircles.length }} 个圈子</strong>
+                <small>发布运动、英语和阅读进度。</small>
+              </article>
             </div>
-            <el-button @click="openPasswordDialog">修改密码</el-button>
-          </div>
+          </section>
+
+          <section class="panel security-card profile-security-card">
+            <div class="panel-head">
+              <div>
+                <h3>安全与访问</h3>
+                <p class="panel-copy">管理登录密码和当前登录状态。</p>
+              </div>
+              <el-icon><Lock /></el-icon>
+            </div>
+            <div class="security-action-list">
+              <article class="security-row">
+                <div>
+                  <span>登录密码</span>
+                  <strong>已加密保存</strong>
+                  <small>进入弹窗后需要填写原密码和新密码。</small>
+                </div>
+                <el-button @click="openPasswordDialog">进入安全验证</el-button>
+              </article>
+              <article class="security-row">
+                <div>
+                  <span>当前会话</span>
+                  <strong>已登录</strong>
+                  <small>退出后需要重新输入账号和密码。</small>
+                </div>
+                <el-button :icon="SwitchButton" @click="logout">退出登录</el-button>
+              </article>
+            </div>
+            <div class="security-timeline">
+              <article>
+                <span></span>
+                <div>
+                  <strong>密码保护</strong>
+                  <small>密码不会在页面中明文展示。</small>
+                </div>
+              </article>
+              <article>
+                <span></span>
+                <div>
+                  <strong>账号范围</strong>
+                  <small>你可以维护自己的资料、目标、好友关系和圈子内容。</small>
+                </div>
+              </article>
+            </div>
+          </section>
         </section>
       </div>
     </main>
@@ -1071,6 +1381,7 @@ const profile = ref(JSON.parse(localStorage.getItem('habitflow_profile') || 'nul
 const authMode = ref('login')
 const authLoading = ref(false)
 const activeView = ref('dashboard')
+const mobileNavOpen = ref(false)
 const authForm = reactive({ username: '', password: '', email: '' })
 const authFormRef = ref()
 const dashboard = ref(null)
@@ -1084,6 +1395,8 @@ const socialUsers = ref([])
 const friends = ref([])
 const friendRequests = ref([])
 const friendCheckinBoard = ref([])
+const friendLeaderboard = ref([])
+const circleLeaderboard = ref([])
 const circles = ref([])
 const circlePosts = ref([])
 const feedPosts = ref([])
@@ -1128,8 +1441,23 @@ const inspirationConfetti = Array.from({ length: 18 }, (_, index) => ({
   rotateEnd: `${220 + ((index * 53) % 220)}deg`,
   color: ['#2f80ed', '#13a46f', '#f59f00', '#e03131', '#8b5cf6'][index % 5]
 }))
+const profileParticles = Array.from({ length: 24 }, (_, index) => ({
+  id: index,
+  left: `${4 + ((index * 19) % 92)}%`,
+  top: `${8 + ((index * 23) % 78)}%`,
+  size: `${3 + (index % 4)}px`,
+  delay: `${(index % 8) * 0.18}s`,
+  duration: `${4.6 + (index % 6) * 0.32}s`
+}))
 const userKeyword = ref('')
 const socialTab = ref('friends')
+const socialTabs = [
+  { name: 'friends', kicker: '默认', label: '好友管理', description: '今日打卡、好友申请与同学搜索' },
+  { name: 'chat', kicker: '私信', label: '好友聊天', description: '选择好友进入会话' },
+  { name: 'circles', kicker: '社区', label: '圈子广场', description: '加入圈子并发布动态' },
+  { name: 'feed', kicker: '动态', label: '社区动态', description: '汇总已加入圈子的消息流' },
+  { name: 'leaderboard', kicker: '排行', label: '打卡排行榜', description: '查看好友和圈子打卡次数' }
+]
 const selectedChatFriendId = ref(null)
 const chatMessages = ref([])
 const messageForm = reactive({ content: '' })
@@ -1143,6 +1471,77 @@ const statusOptions = [
   { label: '进行中', value: 'ACTIVE' },
   { label: '已暂停', value: 'PAUSED' },
   { label: '已完成', value: 'DONE' }
+]
+const navGroups = [
+  {
+    title: '目标',
+    items: [
+      { title: '任务日历', view: 'calendar', description: '按日期查看目标、优先级和打卡状态' },
+      { title: '目标管理', view: 'goals', description: '创建、编辑、归档你的习惯目标' },
+      { title: '打卡记录', view: 'checkins', description: '提交今日打卡或补录历史记录' }
+    ]
+  },
+  {
+    title: '成长',
+    items: [
+      { title: '成长日志', view: 'timeline', description: '回看坚持轨迹、备注和奖励事件' },
+      { title: '消息提醒', view: 'notifications', description: '查看到期、断签和每日提醒' },
+      { title: '勋章奖励', view: 'badges', description: '查看已经解锁的自律成就' }
+    ]
+  },
+  {
+    title: '社交',
+    items: [
+      { title: '社交圈子', view: 'social', description: '好友聊天、圈子动态和同伴监督' }
+    ]
+  },
+  {
+    title: '账号',
+    items: [
+      { title: '个人信息', view: 'profile', description: '维护资料、查看账号安全状态' }
+    ]
+  }
+]
+const authRevealItems = [
+  {
+    text: '运动打卡',
+    images: [
+      {
+        src: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=320&auto=format&fit=crop&q=70',
+        alt: '力量训练器械'
+      },
+      {
+        src: 'https://images.unsplash.com/photo-1476480862126-209bfaa8edc8?w=320&auto=format&fit=crop&q=70',
+        alt: '户外跑步训练'
+      }
+    ]
+  },
+  {
+    text: '英语学习',
+    images: [
+      {
+        src: 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=320&auto=format&fit=crop&q=70',
+        alt: '阅读学习笔记'
+      },
+      {
+        src: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=320&auto=format&fit=crop&q=70',
+        alt: '在线学习课程'
+      }
+    ]
+  },
+  {
+    text: '好友监督',
+    images: [
+      {
+        src: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=320&auto=format&fit=crop&q=70',
+        alt: '朋友一起协作'
+      },
+      {
+        src: 'https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=320&auto=format&fit=crop&q=70',
+        alt: '团队交流'
+      }
+    ]
+  }
 ]
 const priorityOptions = [
   { label: '普通', value: 'NORMAL' },
@@ -1178,40 +1577,37 @@ const goalRules = {
   dailyTargetCount: [{ required: true, type: 'number', min: 1, message: '每日目标次数至少为 1', trigger: 'change' }]
 }
 
-const viewTitle = computed(() => ({
-  dashboard: '数据概览',
-  calendar: '任务日历',
-  goals: '目标管理',
-  checkins: '打卡管理',
-  timeline: '成长日志',
-  notifications: '消息提醒',
-  badges: '勋章奖励',
-  social: '社交圈子',
-  profile: '个人中心'
-}[activeView.value]))
-
-const viewSubtitle = computed(() => ({
-  dashboard: '查看完成次数、连续打卡、完成率与月度成长趋势。',
-  calendar: '按日期查看每天需要推进的目标，并用颜色区分任务紧急程度。',
-  goals: '创建目标、设置周期、维护每日目标次数。',
-  checkins: '提交每日打卡，处理历史补卡并查看记录。',
-  timeline: '按时间线回顾你的每一次坚持与成长。',
-  notifications: '分层查看每日打卡、目标到期和连续中断提醒。',
-  badges: '系统根据坚持情况自动发放奖励。',
-  social: '搜索好友、加入圈子、发布动态并查看同伴进展。',
-  profile: '维护账号资料并定期更新密码。'
-}[activeView.value]))
-
 const metrics = computed(() => [
-  { label: '目标总数', value: dashboard.value?.totalGoals ?? 0 },
-  { label: '进行中目标', value: dashboard.value?.activeGoals ?? 0 },
-  { label: '总完成次数', value: dashboard.value?.totalCheckIns ?? 0 },
-  { label: '连续打卡天数', value: dashboard.value?.currentStreakDays ?? 0 },
-  { label: '平均完成率', value: `${dashboard.value?.averageCompletionRate ?? 0}%` }
+  { label: '目标总数', value: dashboard.value?.totalGoals ?? 0, hint: '所有已创建目标' },
+  { label: '进行中目标', value: dashboard.value?.activeGoals ?? 0, hint: '当前需要推进' },
+  { label: '总完成次数', value: dashboard.value?.totalCheckIns ?? 0, hint: '累计打卡记录' },
+  { label: '连续打卡天数', value: dashboard.value?.currentStreakDays ?? 0, hint: '保持节奏中' },
+  { label: '平均完成率', value: `${dashboard.value?.averageCompletionRate ?? 0}%`, hint: '目标整体表现' }
 ])
 const activeGoalRows = computed(() => goalRows.value.filter((item) => item.goal.status === 'ACTIVE'))
 
 const todayGoals = computed(() => goalsForDate(new Date().toISOString().slice(0, 10)))
+const todayDoneCount = computed(() => {
+  const today = new Date().toISOString().slice(0, 10)
+  return todayGoals.value.filter((item) => checkInForGoalDate(item.goal.id, today)).length
+})
+const todayProgress = computed(() => {
+  if (todayGoals.value.length === 0) return 0
+  return Math.round((todayDoneCount.value / todayGoals.value.length) * 100)
+})
+const todayProgressStyle = computed(() => `${todayProgress.value}%`)
+const greetingText = computed(() => {
+  const hour = new Date().getHours()
+  if (hour < 11) return '早上好'
+  if (hour < 18) return '下午好'
+  return '晚上好'
+})
+const todayFocusText = computed(() => {
+  if (todayGoals.value.length === 0) return '今天还没有安排目标，可以先去目标管理创建一个运动或英语打卡计划。'
+  if (todayDoneCount.value === todayGoals.value.length) return '今日目标已经完成，可以去社交圈分享一下进展，顺手鼓励好友。'
+  const nextGoal = todayGoals.value.find((item) => !checkInForGoalDate(item.goal.id, new Date().toISOString().slice(0, 10)))
+  return `下一步建议完成「${nextGoal?.goal.name || '今日目标'}」，完成后系统会同步更新连续打卡与勋章。`
+})
 const selectedCalendarTasks = computed(() => tasksForDate(selectedCalendarDate.value))
 const selectedCalendarStats = computed(() => {
   const done = selectedCalendarTasks.value.filter((item) => item.checkIn).length
@@ -1224,6 +1620,13 @@ const selectedChatFriend = computed(() => friends.value.find((friend) => friend.
 const selectedCircle = computed(() => circles.value.find((circle) => circle.id === selectedCircleId.value))
 const joinedCircles = computed(() => circles.value.filter((circle) => circle.joined))
 const profileInitial = computed(() => (profile.value?.username || 'H').slice(0, 1).toUpperCase())
+const profileActiveDays = computed(() => {
+  if (!profile.value?.createTime) return 0
+  const createdAt = new Date(profile.value.createTime)
+  if (Number.isNaN(createdAt.getTime())) return 0
+  const diff = Date.now() - createdAt.getTime()
+  return Math.max(1, Math.ceil(diff / 86400000))
+})
 
 onMounted(() => {
   if (token.value) {
@@ -1309,6 +1712,14 @@ async function loadSocialData() {
   circles.value = circlesData
   feedPosts.value = normalizeList(feedData)
   friendCheckinBoard.value = normalizeList(friendCheckinsData)
+  try {
+    const leaderboardData = await socialApi.leaderboards()
+    friendLeaderboard.value = normalizeList(leaderboardData?.friends)
+    circleLeaderboard.value = normalizeList(leaderboardData?.circles)
+  } catch {
+    friendLeaderboard.value = []
+    circleLeaderboard.value = []
+  }
   if (!selectedChatFriendId.value && friends.value.length > 0) {
     selectedChatFriendId.value = friends.value[0].id
   }
@@ -1679,11 +2090,35 @@ function updatePostInteraction(postId, patch) {
   }
 }
 
+function updateNavSpot(event) {
+  const target = event.currentTarget
+  const rect = target.getBoundingClientRect()
+  target.style.setProperty('--spot-x', `${event.clientX - rect.left}px`)
+  target.style.setProperty('--spot-y', `${event.clientY - rect.top}px`)
+  target.style.setProperty('--spot-radius', `${Math.max(rect.width * 0.66, rect.height * 1.05, 52)}px`)
+}
+
+function selectView(view) {
+  activeView.value = view
+  if (view === 'social') {
+    socialTab.value = 'friends'
+  }
+  mobileNavOpen.value = false
+}
+
+function openSocialSection(section) {
+  socialTab.value = section
+  if (section === 'chat') {
+    prepareChat()
+  }
+}
+
 function logout() {
   localStorage.removeItem('habitflow_token')
   localStorage.removeItem('habitflow_profile')
   token.value = ''
   profile.value = null
+  mobileNavOpen.value = false
 }
 
 async function loadTimeline() {

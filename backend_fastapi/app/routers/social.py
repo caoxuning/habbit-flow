@@ -1,7 +1,7 @@
 from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from ..common import AppException, ok
@@ -326,6 +326,66 @@ def friends_today_checkins(current_user: User = Depends(get_current_user), db: S
             "latestCheckIn": check_in_dict(rows[0][0], rows[0][1]) if rows else None,
         })
     return ok(result)
+
+
+@router.get("/leaderboards")
+def social_leaderboards(
+    limit: int = Query(default=10, ge=1, le=50),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    friend_ids = friend_ids_for_user(db, current_user.id)
+    scoped_user_ids = [current_user.id, *friend_ids]
+    user_checkin_count = func.count(CheckIn.id)
+    friend_rows = (
+        db.query(User, user_checkin_count.label("check_in_count"))
+        .outerjoin(CheckIn, CheckIn.user_id == User.id)
+        .filter(User.id.in_(scoped_user_ids))
+        .group_by(User.id, User.username, User.email, User.create_time)
+        .order_by(user_checkin_count.desc(), User.username.asc())
+        .limit(limit)
+        .all()
+    )
+    friend_leaderboard = [
+        {
+            "rank": index + 1,
+            "user": user_summary(user),
+            "checkInCount": int(check_in_count or 0),
+            "isMe": user.id == current_user.id,
+        }
+        for index, (user, check_in_count) in enumerate(friend_rows)
+    ]
+
+    circle_checkin_count = func.count(CheckIn.id)
+    circle_rows = (
+        db.query(SocialCircle, circle_checkin_count.label("check_in_count"))
+        .outerjoin(CircleMember, CircleMember.circle_id == SocialCircle.id)
+        .outerjoin(CheckIn, CheckIn.user_id == CircleMember.user_id)
+        .group_by(
+            SocialCircle.id,
+            SocialCircle.name,
+            SocialCircle.description,
+            SocialCircle.icon,
+            SocialCircle.owner_user_id,
+            SocialCircle.member_count,
+            SocialCircle.create_time,
+        )
+        .order_by(circle_checkin_count.desc(), SocialCircle.member_count.desc(), SocialCircle.name.asc())
+        .limit(limit)
+        .all()
+    )
+    circle_leaderboard = [
+        {
+            "rank": index + 1,
+            "circle": serialize_circle(db, circle, current_user.id),
+            "checkInCount": int(check_in_count or 0),
+        }
+        for index, (circle, check_in_count) in enumerate(circle_rows)
+    ]
+    return ok({
+        "friends": friend_leaderboard,
+        "circles": circle_leaderboard,
+    })
 
 
 @router.get("/friends/{friend_id}/messages")

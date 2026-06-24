@@ -45,6 +45,7 @@ export const socialApi = {
   acceptFriend: (id) => http.put(`/social/friend-requests/${id}/accept`),
   rejectFriend: (id) => http.put(`/social/friend-requests/${id}/reject`),
   friendsTodayCheckins: () => http.get('/social/friends/checkins/today'),
+  leaderboards: () => http.get('/social/leaderboards'),
   messages: (friendId) => http.get(`/social/friends/${friendId}/messages`),
   sendMessage: (friendId, data) => http.post(`/social/friends/${friendId}/messages`, data),
   circles: (params) => http.get('/social/circles', { params }),
