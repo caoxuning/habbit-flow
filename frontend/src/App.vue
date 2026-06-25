@@ -1,5 +1,6 @@
 <template>
   <section v-if="!token" class="auth-shell">
+    <canvas ref="authParticleCanvasRef" class="auth-particle-canvas" aria-hidden="true"></canvas>
     <div class="auth-stage">
       <div class="auth-panel">
         <div class="auth-heading">
@@ -25,10 +26,6 @@
             {{ authMode === 'login' ? '登录' : '注册并登录' }}
           </el-button>
         </el-form>
-        <div class="auth-demo-strip">
-          <span>演示账号</span>
-          <strong>member3 / 123456</strong>
-        </div>
       </div>
 
       <aside class="auth-reveal-panel">
@@ -509,71 +506,171 @@
         <el-empty v-else description="暂无成长记录" />
       </div>
 
-      <div v-if="activeView === 'notifications'" class="notification-layout">
-        <section class="panel notification-panel">
-          <div class="panel-head">
-            <div>
-              <h3>分层智能提醒</h3>
-              <p class="panel-copy">系统会根据目标计划和打卡记录，自动区分三类提醒，帮助你按时推进计划。</p>
-            </div>
-            <div class="notification-actions">
-              <el-switch v-model="notificationFilters.unreadOnly" active-text="只看未读" @change="loadNotifications" />
-              <el-button :icon="Refresh" @click="generateNotifications">重新生成</el-button>
-              <el-button type="primary" :disabled="notificationUnreadCount === 0" @click="markAllNotificationsRead">全部已读</el-button>
-            </div>
-          </div>
-          <div class="notification-summary">
-            <article>
-              <strong>{{ notificationCountByType('DAILY_CHECK_IN') }}</strong>
-              <span>日常打卡提醒</span>
-            </article>
-            <article>
-              <strong>{{ notificationCountByType('GOAL_EXPIRE') }}</strong>
-              <span>目标到期预警</span>
-            </article>
-            <article>
-              <strong>{{ notificationCountByType('STREAK_BREAK') }}</strong>
-              <span>连续中断提醒</span>
-            </article>
-          </div>
-          <div class="notification-list">
-            <article
-              v-for="item in notifications"
-              :key="item.id"
-              class="notification-item"
-              :class="[notificationTypeClass(item.type), { unread: !item.read }]"
-            >
-              <div class="notification-icon">
-                <el-icon><Bell /></el-icon>
-              </div>
+      <div v-if="activeView === 'notifications'" class="notification-workspace">
+        <aside class="notification-side-nav" aria-label="消息提醒分类">
+          <button
+            v-for="tab in notificationTabs"
+            :key="tab.name"
+            class="social-side-link spot-nav-button"
+            :class="{ active: notificationMode === tab.name }"
+            type="button"
+            @pointermove="updateNavSpot"
+            @click="notificationMode = tab.name"
+          >
+            <span>{{ tab.kicker }}</span>
+            <strong>{{ tab.label }}</strong>
+            <small>{{ tab.description }}</small>
+          </button>
+        </aside>
+
+        <section class="notification-content">
+          <section class="panel notification-overview-panel">
+            <div class="panel-head">
               <div>
-                <div class="notification-title-row">
-                  <strong>{{ item.title }}</strong>
-                  <el-tag :type="notificationTagType(item.type)" effect="plain">{{ notificationTypeLabel(item.type) }}</el-tag>
-                  <el-tag v-if="!item.read" type="danger" effect="dark">未读</el-tag>
+                <h3>消息提醒</h3>
+                <p class="panel-copy">集中处理今日打卡、目标到期和连续中断提醒。</p>
+              </div>
+              <div class="notification-actions">
+                <el-switch v-model="notificationFilters.unreadOnly" active-text="只看未读" @change="loadNotifications" />
+              </div>
+            </div>
+            <div class="notification-summary">
+              <article>
+                <strong>{{ notificationUnreadCount }}</strong>
+                <span>未读提醒</span>
+              </article>
+              <article>
+                <strong>{{ activeGoalRows.length }}</strong>
+                <span>进行中目标</span>
+              </article>
+              <article>
+                <strong>{{ todayDoneCount }}/{{ todayGoals.length }}</strong>
+                <span>今日打卡</span>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel notification-feed-panel">
+            <div class="panel-head compact">
+              <div>
+                <h3>{{ currentNotificationTab.label }}</h3>
+                <p class="panel-copy">{{ currentNotificationTab.description }}</p>
+              </div>
+              <el-tag effect="plain">{{ filteredNotifications.length }} 条</el-tag>
+            </div>
+            <div class="notification-list">
+              <article
+                v-for="item in filteredNotifications"
+                :key="item.id"
+                class="notification-item"
+                :class="[notificationTypeClass(item.type), { unread: !item.read }]"
+              >
+                <div class="notification-icon">
+                  <el-icon><Bell /></el-icon>
                 </div>
-                <p>{{ item.content }}</p>
-                <small>{{ formatDateTime(item.createTime) }}</small>
+                <div class="notification-body">
+                  <div class="notification-title-row">
+                    <strong>{{ item.title }}</strong>
+                    <el-tag :type="notificationTagType(item.type)" effect="plain">{{ notificationTypeLabel(item.type) }}</el-tag>
+                    <el-tag v-if="!item.read" type="danger" effect="dark">未读</el-tag>
+                  </div>
+                  <p>{{ item.content }}</p>
+                  <small>{{ formatDateTime(item.createTime) }}</small>
+                </div>
+              </article>
+              <el-empty v-if="filteredNotifications.length === 0" description="当前分类暂无提醒" />
+            </div>
+          </section>
+
+          <section class="panel notification-assist-panel">
+            <div class="panel-head compact">
+              <div>
+                <h3>今日处理建议</h3>
+                <p class="panel-copy">根据目标和消息状态给出下一步动作。</p>
               </div>
-              <div class="notification-row-actions">
-                <el-button size="small" :disabled="item.read" @click="markNotificationRead(item)">已读</el-button>
-                <el-button size="small" type="danger" plain @click="removeNotification(item)">删除</el-button>
-              </div>
-            </article>
-            <el-empty v-if="notifications.length === 0" description="暂无提醒消息" />
-          </div>
+              <el-icon><Timer /></el-icon>
+            </div>
+            <div class="notification-action-grid">
+              <article v-for="item in notificationActionCards" :key="item.title">
+                <span>{{ item.kicker }}</span>
+                <strong>{{ item.title }}</strong>
+                <small>{{ item.description }}</small>
+              </article>
+            </div>
+          </section>
         </section>
       </div>
 
-      <div v-if="activeView === 'badges'" class="badge-grid">
-        <article v-for="badge in badges" :key="badge.id" class="badge-card">
-          <div class="badge-icon"><el-icon><Medal /></el-icon></div>
-          <strong>{{ badge.name }}</strong>
-          <p>{{ badge.description }}</p>
-          <small>{{ badge.conditionText }}</small>
-          <small v-if="badge.obtainedTime">获得时间：{{ formatDateTime(badge.obtainedTime) }}</small>
-        </article>
-        <el-empty v-if="badges.length === 0" description="完成首次打卡即可获得第一枚勋章" />
+      <div v-if="activeView === 'badges'" class="badge-workspace">
+        <aside class="badge-side-panel panel">
+          <div class="badge-hero-medal"><el-icon><Medal /></el-icon></div>
+          <span>自律成就</span>
+          <h3>{{ badges.length }} 枚已解锁</h3>
+          <p>勋章会跟随你的连续打卡、累计完成和社交互动逐步点亮。</p>
+          <div class="badge-side-stats">
+            <article>
+              <strong>{{ dashboard?.currentStreakDays ?? 0 }}</strong>
+              <span>连续天数</span>
+            </article>
+            <article>
+              <strong>{{ dashboard?.totalCheckIns ?? 0 }}</strong>
+              <span>累计打卡</span>
+            </article>
+            <article>
+              <strong>{{ badgeProgress }}%</strong>
+              <span>收藏进度</span>
+            </article>
+          </div>
+        </aside>
+
+        <section class="badge-content">
+          <section class="panel badge-showcase-panel">
+            <div class="panel-head">
+              <div>
+                <h3>我的勋章墙</h3>
+                <p class="panel-copy">展示已经获得的成就和解锁条件。</p>
+              </div>
+              <el-tag type="success" effect="plain">{{ badges.length }} 已获得</el-tag>
+            </div>
+            <div class="badge-grid badge-grid-rich">
+              <article v-for="badge in badges" :key="badge.id" class="badge-card badge-card-rich">
+                <div class="badge-icon"><el-icon><Medal /></el-icon></div>
+                <div>
+                  <strong>{{ badge.name }}</strong>
+                  <p>{{ badge.description }}</p>
+                  <small>{{ badge.conditionText }}</small>
+                  <small v-if="badge.obtainedTime">获得时间：{{ formatDateTime(badge.obtainedTime) }}</small>
+                </div>
+              </article>
+              <article v-for="item in badgeRoadmap" :key="item.name" class="badge-card badge-card-rich locked">
+                <div class="badge-icon"><el-icon><Lock /></el-icon></div>
+                <div>
+                  <strong>{{ item.name }}</strong>
+                  <p>{{ item.description }}</p>
+                  <small>{{ item.condition }}</small>
+                </div>
+              </article>
+              <el-empty v-if="badges.length === 0 && badgeRoadmap.length === 0" description="完成首次打卡即可获得第一枚勋章" />
+            </div>
+          </section>
+
+          <section class="panel badge-plan-panel">
+            <div class="panel-head compact">
+              <div>
+                <h3>下一枚勋章</h3>
+                <p class="panel-copy">保持今天的节奏，优先完成还没打卡的目标。</p>
+              </div>
+              <el-icon><Aim /></el-icon>
+            </div>
+            <div class="badge-plan-list">
+              <article v-for="item in badgePlanCards" :key="item.title">
+                <span>{{ item.kicker }}</span>
+                <strong>{{ item.title }}</strong>
+                <small>{{ item.description }}</small>
+              </article>
+            </div>
+          </section>
+        </section>
       </div>
 
       <div v-if="activeView === 'social'" class="social-space social-workspace">
@@ -851,7 +948,17 @@
                   <strong>{{ post.author.username }} · {{ post.circleName }}</strong>
                   <small>{{ post.createTime }}</small>
                 </div>
+                <div class="post-tags">
+                  <el-tag v-if="post.postType === 'CHECK_IN'" type="success" effect="plain">打卡分享</el-tag>
+                  <el-tag effect="plain">{{ visibilityLabel(post.visibility) }}</el-tag>
+                </div>
                 <p>{{ post.content }}</p>
+                <div v-if="post.checkIn" class="post-checkin-card">
+                  <span>{{ post.checkIn.goalType || '目标' }}</span>
+                  <strong>{{ post.checkIn.goalName || goalName(post.checkIn.goalId) }}</strong>
+                  <small>{{ post.checkIn.checkDate }} · {{ post.checkIn.makeup ? '补卡' : '今日打卡' }}</small>
+                  <p v-if="post.checkIn.remark">{{ post.checkIn.remark }}</p>
+                </div>
                 <div class="post-actions">
                   <el-button size="small" :type="post.liked ? 'primary' : 'default'" @click="togglePostLike(post)">
                     {{ post.liked ? '已赞' : '点赞' }} {{ post.likeCount }}
@@ -936,14 +1043,24 @@
             <el-button text :icon="Refresh" @click="loadSocialData">刷新</el-button>
           </div>
           <div class="post-list">
-            <article v-for="post in feedPosts" :key="post.id" class="post-item">
-              <div class="post-meta">
-                <div class="avatar-sm">{{ userInitial(post.author) }}</div>
-                <strong>{{ post.author.username }} · {{ post.circleName }}</strong>
-                <small>{{ post.createTime }}</small>
-              </div>
-              <p>{{ post.content }}</p>
-              <div class="post-actions">
+              <article v-for="post in feedPosts" :key="post.id" class="post-item">
+                <div class="post-meta">
+                  <div class="avatar-sm">{{ userInitial(post.author) }}</div>
+                  <strong>{{ post.author.username }} · {{ post.circleName }}</strong>
+                  <small>{{ post.createTime }}</small>
+                </div>
+                <div class="post-tags">
+                  <el-tag v-if="post.postType === 'CHECK_IN'" type="success" effect="plain">打卡分享</el-tag>
+                  <el-tag effect="plain">{{ visibilityLabel(post.visibility) }}</el-tag>
+                </div>
+                <p>{{ post.content }}</p>
+                <div v-if="post.checkIn" class="post-checkin-card">
+                  <span>{{ post.checkIn.goalType || '目标' }}</span>
+                  <strong>{{ post.checkIn.goalName || goalName(post.checkIn.goalId) }}</strong>
+                  <small>{{ post.checkIn.checkDate }} · {{ post.checkIn.makeup ? '补卡' : '今日打卡' }}</small>
+                  <p v-if="post.checkIn.remark">{{ post.checkIn.remark }}</p>
+                </div>
+                <div class="post-actions">
                 <el-button size="small" :type="post.liked ? 'primary' : 'default'" @click="togglePostLike(post)">
                   {{ post.liked ? '已赞' : '点赞' }} {{ post.likeCount }}
                 </el-button>
@@ -1104,20 +1221,21 @@
               <el-icon><User /></el-icon>
             </div>
             <el-form class="profile-form-grid" :model="profileForm" label-position="top">
-              <el-form-item label="用户名">
-                <el-input v-model="profileForm.username" />
+              <el-form-item label="显示名称">
+                <el-input v-model="profileForm.username" placeholder="输入新的展示名称" maxlength="50" show-word-limit />
               </el-form-item>
               <el-form-item label="邮箱">
                 <el-input v-model="profileForm.email" />
               </el-form-item>
+              <el-form-item label="当前用户名">
+                <el-input :model-value="profile?.username || '-'" disabled />
+              </el-form-item>
               <el-form-item label="账号创建时间">
                 <el-input :model-value="formatDateTime(profile?.createTime)" disabled />
               </el-form-item>
-              <el-form-item label="当前身份">
-                <el-input model-value="普通协作成员" disabled />
-              </el-form-item>
               <div class="profile-form-actions">
-                <el-button type="primary" @click="saveProfile">保存资料</el-button>
+                <el-button @click="resetProfileForm">恢复当前资料</el-button>
+                <el-button type="primary" @click="saveProfile">保存改名</el-button>
               </div>
             </el-form>
           </section>
@@ -1362,7 +1480,17 @@
               <small>{{ tip.goalName }}</small>
             </article>
           </div>
-          <el-button type="primary" class="inspiration-action" @click="closeInspiration">继续坚持</el-button>
+          <div class="inspiration-actions">
+            <el-button class="inspiration-action" @click="closeInspiration">继续坚持</el-button>
+            <el-button
+              v-if="pendingShareData"
+              type="primary"
+              class="inspiration-action"
+              @click="shareFromInspiration"
+            >
+              分享打卡
+            </el-button>
+          </div>
         </section>
       </div>
     </transition>
@@ -1370,7 +1498,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
 import { Aim, Bell, Calendar, Check, DataAnalysis, Download, Edit, Lock, Medal, Plus, Refresh, SwitchButton, Timer, User } from '@element-plus/icons-vue'
@@ -1384,6 +1512,7 @@ const activeView = ref('dashboard')
 const mobileNavOpen = ref(false)
 const authForm = reactive({ username: '', password: '', email: '' })
 const authFormRef = ref()
+const authParticleCanvasRef = ref()
 const dashboard = ref(null)
 const goalRows = ref([])
 const checkIns = ref([])
@@ -1407,6 +1536,14 @@ const calendarDialogVisible = ref(false)
 const selectedCalendarDate = ref('')
 let monthlyChart
 let rateChart
+let idleTimer = null
+let authParticleFrame = 0
+let authParticleStop = null
+
+const IDLE_TIMEOUT_MS = 60 * 60 * 1000
+const IDLE_CHECK_MS = 60 * 1000
+const LAST_ACTIVITY_KEY = 'habitflow_last_activity'
+const ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'wheel', 'touchstart']
 
 const goalDialogVisible = ref(false)
 const goalFormRef = ref()
@@ -1415,6 +1552,7 @@ const checkForm = reactive({ goalId: null, remark: '' })
 const makeupForm = reactive({ goalId: null, checkDate: '', remark: '' })
 const recordFilters = reactive({ goalId: null, dateRange: [] })
 const notificationFilters = reactive({ unreadOnly: false })
+const notificationMode = ref('all')
 const timelineList = ref([])
 const timelineDays = ref(30)
 const profileForm = reactive({ username: '', email: '' })
@@ -1457,6 +1595,19 @@ const socialTabs = [
   { name: 'circles', kicker: '社区', label: '圈子广场', description: '加入圈子并发布动态' },
   { name: 'feed', kicker: '动态', label: '社区动态', description: '汇总已加入圈子的消息流' },
   { name: 'leaderboard', kicker: '排行', label: '打卡排行榜', description: '查看好友和圈子打卡次数' }
+]
+const notificationTabs = [
+  { name: 'all', kicker: '全部', label: '全部提醒', description: '查看所有待处理和历史提醒' },
+  { name: 'unread', kicker: '优先', label: '未读提醒', description: '优先处理还没有确认的提醒' },
+  { name: 'DAILY_CHECK_IN', kicker: '日常', label: '打卡提醒', description: '和今日目标相关的打卡消息' },
+  { name: 'GOAL_EXPIRE', kicker: '到期', label: '目标预警', description: '临近结束日期的目标提醒' },
+  { name: 'STREAK_BREAK', kicker: '连续', label: '中断提醒', description: '连续打卡节奏被打断时提示' }
+]
+const badgeRoadmap = [
+  { name: '晨间启动者', description: '连续保持早起或晨间学习节奏。', condition: '连续 3 天完成任一早间目标' },
+  { name: '英语听力周', description: '把英语听力练习稳定放进日程。', condition: '7 天内完成 5 次英语目标' },
+  { name: '运动稳定器', description: '保持运动训练，不让节奏断掉。', condition: '累计完成 10 次运动打卡' },
+  { name: '同伴鼓励者', description: '和好友互相提醒并分享进度。', condition: '完成好友提醒或圈子分享' }
 ]
 const selectedChatFriendId = ref(null)
 const chatMessages = ref([])
@@ -1554,7 +1705,7 @@ const visibilityOptions = [
   { label: '圈子可见', value: 'CIRCLE' },
   { label: '仅自己可见', value: 'PRIVATE' }
 ]
-const encourageMessages = ['坚持得很稳', '今天也完成得很漂亮', '明天继续一起打卡']
+const encourageMessage = '坚持得很稳，继续保持。'
 const goalTypeOptions = ['学习', '运动', '阅读', '英语', '早睡', '健身']
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const calendarVisibleGoalLimit = 2
@@ -1627,11 +1778,75 @@ const profileActiveDays = computed(() => {
   const diff = Date.now() - createdAt.getTime()
   return Math.max(1, Math.ceil(diff / 86400000))
 })
+const currentNotificationTab = computed(() => (
+  notificationTabs.find((tab) => tab.name === notificationMode.value) || notificationTabs[0]
+))
+const filteredNotifications = computed(() => {
+  if (notificationMode.value === 'all') return notifications.value
+  if (notificationMode.value === 'unread') return notifications.value.filter((item) => !item.read)
+  return notifications.value.filter((item) => item.type === notificationMode.value)
+})
+const notificationActionCards = computed(() => [
+  {
+    kicker: '今日',
+    title: todayGoals.value.length > 0 ? `${todayDoneCount.value}/${todayGoals.value.length} 个目标已打卡` : '今天暂无目标',
+    description: todayGoals.value.length > todayDoneCount.value ? '先完成剩余目标，再把提醒标记为已读。' : '今天节奏不错，可以查看成长日志或分享给好友。'
+  },
+  {
+    kicker: '提醒',
+    title: `${notificationUnreadCount.value} 条未读消息`,
+    description: notificationUnreadCount.value > 0 ? '建议先处理未读提醒，避免错过到期目标。' : '提醒已经清空，当前页面保持关注即可。'
+  },
+  {
+    kicker: '连续',
+    title: `${dashboard.value?.currentStreakDays ?? 0} 天连续打卡`,
+    description: '连续记录会影响勋章和排行榜，尽量每天完成至少一次。'
+  }
+])
+const badgeProgress = computed(() => {
+  const total = badges.value.length + badgeRoadmap.length
+  if (total === 0) return 0
+  return Math.round((badges.value.length / total) * 100)
+})
+const badgePlanCards = computed(() => [
+  {
+    kicker: '下一步',
+    title: todayGoals.value.length > todayDoneCount.value ? '完成今日剩余目标' : '保持连续打卡',
+    description: todayGoals.value.length > todayDoneCount.value ? '优先完成今天还未打卡的目标。' : '今天已完成，可以准备明天的训练或学习安排。'
+  },
+  {
+    kicker: '成长',
+    title: `${dashboard.value?.totalCheckIns ?? 0} 次累计打卡`,
+    description: '累计次数越高，越容易解锁长期坚持类勋章。'
+  },
+  {
+    kicker: '社交',
+    title: `${friends.value.length} 位好友监督`,
+    description: '与好友互相提醒，可以让打卡更容易持续。'
+  }
+])
 
 onMounted(() => {
+  startSessionWatch()
   if (token.value) {
-    loadAll()
+    loadAll().catch(() => {})
+  } else {
+    nextTick(startAuthParticles)
   }
+})
+
+onUnmounted(() => {
+  stopSessionWatch()
+  stopAuthParticles()
+})
+
+watch(token, async (value) => {
+  if (value) {
+    stopAuthParticles()
+    return
+  }
+  await nextTick()
+  startAuthParticles()
 })
 
 watch(activeView, () => {
@@ -1645,7 +1860,7 @@ watch(activeView, () => {
     loadSocialData()
   }
   if (activeView.value === 'notifications') {
-    loadNotifications()
+    enterNotifications()
   }
 })
 
@@ -1654,6 +1869,147 @@ watch(socialTab, () => {
     prepareChat()
   }
 })
+
+function startAuthParticles() {
+  stopAuthParticles()
+  const canvas = authParticleCanvasRef.value
+  if (!canvas || token.value) return
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+
+  const mouse = { x: -9999, y: -9999, active: false }
+  const particles = []
+  const config = {
+    maxParticles: 180,
+    minParticles: 92,
+    density: 10500,
+    connectDistance: 138,
+    repelRadius: 170,
+    repelForce: 5.8
+  }
+
+  function resize() {
+    const rect = canvas.getBoundingClientRect()
+    const dpr = Math.min(window.devicePixelRatio || 1, 2)
+    canvas.width = Math.max(1, Math.floor(rect.width * dpr))
+    canvas.height = Math.max(1, Math.floor(rect.height * dpr))
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    const targetCount = Math.max(
+      config.minParticles,
+      Math.min(config.maxParticles, Math.floor((rect.width * rect.height) / config.density))
+    )
+    while (particles.length < targetCount) particles.push(createParticle(rect.width, rect.height))
+    particles.length = targetCount
+  }
+
+  function createParticle(width, height) {
+    const hueShift = Math.random()
+    return {
+      x: Math.random() * width,
+      y: Math.random() * height,
+      vx: (Math.random() - 0.5) * 0.42,
+      vy: (Math.random() - 0.5) * 0.42,
+      radius: 1.35 + Math.random() * 1.75,
+      color: hueShift > 0.56 ? 'rgba(20, 184, 166, 0.9)' : 'rgba(59, 130, 246, 0.92)'
+    }
+  }
+
+  function updatePointer(event) {
+    const rect = canvas.getBoundingClientRect()
+    mouse.x = event.clientX - rect.left
+    mouse.y = event.clientY - rect.top
+    mouse.active = true
+  }
+
+  function clearPointer() {
+    mouse.active = false
+    mouse.x = -9999
+    mouse.y = -9999
+  }
+
+  function tick() {
+    const width = canvas.clientWidth
+    const height = canvas.clientHeight
+    ctx.clearRect(0, 0, width, height)
+
+    for (let i = 0; i < particles.length; i += 1) {
+      const a = particles[i]
+      for (let j = i + 1; j < particles.length; j += 1) {
+        const b = particles[j]
+        const dx = a.x - b.x
+        const dy = a.y - b.y
+        const distance = Math.hypot(dx, dy)
+        if (distance < config.connectDistance) {
+          const alpha = (1 - distance / config.connectDistance) * 0.34
+          ctx.beginPath()
+          ctx.moveTo(a.x, a.y)
+          ctx.lineTo(b.x, b.y)
+          ctx.strokeStyle = `rgba(64, 126, 214, ${alpha})`
+          ctx.lineWidth = 1
+          ctx.stroke()
+        }
+      }
+    }
+
+    particles.forEach((particle) => {
+      if (mouse.active) {
+        const dx = particle.x - mouse.x
+        const dy = particle.y - mouse.y
+        const distance = Math.hypot(dx, dy)
+        if (distance > 0 && distance < config.repelRadius) {
+          const power = (1 - distance / config.repelRadius) ** 2
+          particle.vx += (dx / distance) * power * config.repelForce
+          particle.vy += (dy / distance) * power * config.repelForce
+        }
+      }
+
+      particle.vx *= 0.93
+      particle.vy *= 0.93
+      particle.vx += (Math.random() - 0.5) * 0.035
+      particle.vy += (Math.random() - 0.5) * 0.035
+      particle.x += particle.vx
+      particle.y += particle.vy
+
+      if (particle.x < -12) particle.x = width + 12
+      if (particle.x > width + 12) particle.x = -12
+      if (particle.y < -12) particle.y = height + 12
+      if (particle.y > height + 12) particle.y = -12
+
+      const glow = ctx.createRadialGradient(particle.x, particle.y, 0, particle.x, particle.y, particle.radius * 5)
+      glow.addColorStop(0, particle.color)
+      glow.addColorStop(1, 'rgba(59, 130, 246, 0)')
+      ctx.fillStyle = glow
+      ctx.beginPath()
+      ctx.arc(particle.x, particle.y, particle.radius * 5, 0, Math.PI * 2)
+      ctx.fill()
+
+      ctx.fillStyle = particle.color
+      ctx.beginPath()
+      ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2)
+      ctx.fill()
+    })
+
+    authParticleFrame = requestAnimationFrame(tick)
+  }
+
+  resize()
+  window.addEventListener('resize', resize)
+  window.addEventListener('pointermove', updatePointer)
+  window.addEventListener('pointerleave', clearPointer)
+  authParticleFrame = requestAnimationFrame(tick)
+  authParticleStop = () => {
+    cancelAnimationFrame(authParticleFrame)
+    window.removeEventListener('resize', resize)
+    window.removeEventListener('pointermove', updatePointer)
+    window.removeEventListener('pointerleave', clearPointer)
+    authParticleFrame = 0
+    authParticleStop = null
+  }
+}
+
+function stopAuthParticles() {
+  if (authParticleStop) authParticleStop()
+}
 
 async function submitAuth() {
   await authFormRef.value?.validate()
@@ -1666,8 +2022,10 @@ async function submitAuth() {
     profile.value = data.profile
     localStorage.setItem('habitflow_token', data.token)
     localStorage.setItem('habitflow_profile', JSON.stringify(data.profile))
+    markUserActivity()
     Object.assign(profileForm, { username: data.profile.username, email: data.profile.email })
     await loadAll()
+    activeView.value = 'dashboard'
     ElMessage.success('登录成功')
   } finally {
     authLoading.value = false
@@ -1806,9 +2164,15 @@ function showInspiration(data) {
 
 function closeInspiration() {
   inspirationVisible.value = false
+  pendingShareData.value = null
+}
+
+async function shareFromInspiration() {
+  inspirationVisible.value = false
   if (pendingShareData.value) {
     const data = pendingShareData.value
     pendingShareData.value = null
+    await loadSocialData()
     prepareShareDialog(data)
   }
 }
@@ -1826,11 +2190,12 @@ function prepareShareDialog(data) {
   const checkIn = data?.checkIn
   if (!checkIn) return
   const goal = goalRows.value.find((item) => item.goal.id === checkIn.goalId)?.goal
+  const firstJoinedCircle = circles.value.find((circle) => circle.joined)
   latestCheckInShare.value = { checkIn, goal }
   Object.assign(shareForm, {
     content: defaultShareContent(checkIn, goal),
-    visibility: friends.value.length > 0 ? 'FRIENDS' : 'PUBLIC',
-    circleId: selectedCircleId.value || circles.value.find((circle) => circle.joined)?.id || null,
+    visibility: firstJoinedCircle ? 'CIRCLE' : 'PRIVATE',
+    circleId: selectedCircleId.value || firstJoinedCircle?.id || null,
     shareToFriends: friends.value.length > 0,
     friendIds: friends.value.map((friend) => friend.id)
   })
@@ -1854,7 +2219,7 @@ async function submitShareCheckIn() {
     ElMessage.warning('请选择要发布到的圈子')
     return
   }
-  await socialApi.shareCheckIn({
+  const result = await socialApi.shareCheckIn({
     checkInId: latestCheckInShare.value.checkIn.id,
     content: shareForm.content.trim(),
     visibility: shareForm.visibility,
@@ -1863,8 +2228,21 @@ async function submitShareCheckIn() {
     friendIds: shareForm.shareToFriends ? shareForm.friendIds : []
   })
   shareDialogVisible.value = false
-  ElMessage.success('打卡分享已发送')
   await loadSocialData()
+  if (result?.post) {
+    selectedCircleId.value = result.post.circleId
+    await loadCirclePosts(result.post.circleId)
+    activeView.value = 'social'
+    socialTab.value = 'circles'
+    ElMessage.success('已同步到圈子动态')
+  } else if (result?.notifiedFriendCount > 0) {
+    activeView.value = 'social'
+    socialTab.value = 'chat'
+    prepareChat()
+    ElMessage.success(`已通知 ${result.notifiedFriendCount} 位好友`)
+  } else {
+    ElMessage.success('打卡分享已处理')
+  }
 }
 
 async function quickCheckIn(goal) {
@@ -1873,9 +2251,9 @@ async function quickCheckIn(goal) {
     return
   }
   const data = await checkInApi.create({ goalId: goal.id, remark: '快速打卡' })
+  requestShareAfterCheckIn(data)
   showInspiration(data)
   await loadAll()
-  requestShareAfterCheckIn(data)
 }
 
 async function submitCheckIn(isMakeup) {
@@ -1894,12 +2272,12 @@ async function submitCheckIn(isMakeup) {
   } else {
     data = await checkInApi.create(form)
   }
-  showInspiration(data)
-  Object.assign(form, isMakeup ? { goalId: null, checkDate: '', remark: '' } : { goalId: null, remark: '' })
-  await loadAll()
   if (!isMakeup) {
     requestShareAfterCheckIn(data)
   }
+  showInspiration(data)
+  Object.assign(form, isMakeup ? { goalId: null, checkDate: '', remark: '' } : { goalId: null, remark: '' })
+  await loadAll()
 }
 
 async function saveProfile() {
@@ -1915,6 +2293,13 @@ async function saveProfile() {
   profile.value = data
   localStorage.setItem('habitflow_profile', JSON.stringify(data))
   ElMessage.success('资料已更新')
+}
+
+function resetProfileForm() {
+  Object.assign(profileForm, {
+    username: profile.value?.username || '',
+    email: profile.value?.email || ''
+  })
 }
 
 async function changePassword() {
@@ -2073,8 +2458,7 @@ async function submitComment(post) {
 }
 
 async function encouragePost(post) {
-  const content = encourageMessages[Math.floor(Math.random() * encourageMessages.length)]
-  await socialApi.commentPost(post.id, { content })
+  await socialApi.commentPost(post.id, { content: encourageMessage })
   ElMessage.success('鼓励已发送')
   await loadComments(post.id)
   expandedPostId.value = post.id
@@ -2098,6 +2482,49 @@ function updateNavSpot(event) {
   target.style.setProperty('--spot-radius', `${Math.max(rect.width * 0.66, rect.height * 1.05, 52)}px`)
 }
 
+function startSessionWatch() {
+  window.addEventListener('habitflow:auth-expired', handleAuthExpired)
+  ACTIVITY_EVENTS.forEach((eventName) => {
+    window.addEventListener(eventName, markUserActivity, { passive: true })
+  })
+  if (token.value && !localStorage.getItem(LAST_ACTIVITY_KEY)) {
+    markUserActivity()
+  }
+  idleTimer = window.setInterval(checkIdleSession, IDLE_CHECK_MS)
+  checkIdleSession()
+}
+
+function stopSessionWatch() {
+  window.removeEventListener('habitflow:auth-expired', handleAuthExpired)
+  ACTIVITY_EVENTS.forEach((eventName) => {
+    window.removeEventListener(eventName, markUserActivity)
+  })
+  if (idleTimer) {
+    window.clearInterval(idleTimer)
+    idleTimer = null
+  }
+}
+
+function markUserActivity() {
+  if (!token.value) return
+  localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()))
+}
+
+function checkIdleSession() {
+  if (!token.value) return
+  const lastActivity = Number(localStorage.getItem(LAST_ACTIVITY_KEY) || Date.now())
+  if (Date.now() - lastActivity >= IDLE_TIMEOUT_MS) {
+    clearSession()
+    ElMessage.warning('已超过 1 小时未操作，请重新登录')
+  }
+}
+
+function handleAuthExpired(event) {
+  if (!token.value) return
+  clearSession()
+  ElMessage.warning(event.detail?.message || '登录状态已过期，请重新登录')
+}
+
 function selectView(view) {
   activeView.value = view
   if (view === 'social') {
@@ -2114,10 +2541,16 @@ function openSocialSection(section) {
 }
 
 function logout() {
+  clearSession()
+}
+
+function clearSession() {
   localStorage.removeItem('habitflow_token')
   localStorage.removeItem('habitflow_profile')
+  localStorage.removeItem(LAST_ACTIVITY_KEY)
   token.value = ''
   profile.value = null
+  activeView.value = 'dashboard'
   mobileNavOpen.value = false
 }
 
@@ -2184,11 +2617,13 @@ async function loadNotifications() {
   notificationUnreadCount.value = data?.unreadCount || 0
 }
 
-async function generateNotifications() {
-  const data = await notificationApi.generate()
-  notificationUnreadCount.value = data?.unreadCount || 0
+async function enterNotifications() {
+  notificationFilters.unreadOnly = false
   await loadNotifications()
-  ElMessage.success('已根据当前目标生成提醒')
+  if (notificationUnreadCount.value > 0) {
+    await notificationApi.markAllRead()
+    await loadNotifications()
+  }
 }
 
 async function markNotificationRead(item) {
@@ -2230,6 +2665,15 @@ function statusLabel(status) {
 
 function friendshipLabel(status) {
   return { NONE: '未添加', PENDING: '待处理', ACCEPTED: '已通过', REJECTED: '已拒绝' }[status] || status
+}
+
+function visibilityLabel(visibility) {
+  return {
+    PUBLIC: '公开',
+    FRIENDS: '好友可见',
+    CIRCLE: '圈子可见',
+    PRIVATE: '仅自己可见'
+  }[visibility] || '公开'
 }
 
 function formatTime(value) {

@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 from ..business import completed_count, current_streak_days, goal_progress
 from ..common import ok
 from ..deps import get_current_user, get_db
-from ..inspirations import get_inspiration
 from ..models import CheckIn, Goal, User, UserBadge, Badge
 
 router = APIRouter(prefix="/api/stats", tags=["统计"])
@@ -127,20 +126,6 @@ def growth_timeline(
             "badgeDescription": badge_desc,
         })
 
-    # 4. 对有打卡记录的日期附加一条每日推荐
-    for d in timeline:
-        events = timeline[d]["events"]
-        has_checkin = any(e["type"] == "checkin" for e in events)
-        if has_checkin:
-            # 取当天第一个打卡的目标类型
-            goal_type = next(e["goalType"] for e in events if e["type"] == "checkin")
-            insp = get_inspiration(goal_type)
-            timeline[d]["events"].append({
-                "type": "inspiration",
-                "content": insp["content"],
-                "cn": insp["cn"],
-            })
-
-    # 5. 按日期倒序排列
+    # 4. 按日期倒序排列
     sorted_dates = sorted(timeline.keys(), reverse=True)
     return ok([timeline[d] for d in sorted_dates])

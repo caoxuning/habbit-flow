@@ -7,7 +7,7 @@ from passlib.context import CryptContext
 from .common import AppException
 
 
-SECRET_KEY = os.getenv("JWT_SECRET", "habitflow-fastapi-demo-secret")
+SECRET_KEY = os.getenv("JWT_SECRET", "habitflow-fastapi-local-secret")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_DAYS = 7
 
