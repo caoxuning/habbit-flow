@@ -862,6 +862,103 @@ h1 {
   color: #667482;
 }
 
+/* Notifications: same full-screen pane model as social pages. */
+.notification-workspace {
+  min-height: calc(100vh - 128px);
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.notification-side-nav {
+  height: calc(100vh - 128px);
+  min-height: 640px;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  overflow-y: auto;
+  padding: 12px;
+  border: 1px solid #e1e8f0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 22px 60px rgba(15, 23, 42, 0.08);
+}
+
+.notification-content {
+  height: calc(100vh - 128px);
+  min-height: 640px;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 14px;
+}
+
+.notification-overview-panel {
+  grid-column: 1 / -1;
+}
+
+.notification-feed-panel,
+.notification-assist-panel {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.notification-feed-panel {
+  grid-column: 1;
+}
+
+.notification-assist-panel {
+  grid-column: 2;
+}
+
+.notification-content .notification-list {
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.notification-body {
+  min-width: 0;
+}
+
+.notification-body p {
+  margin: 8px 0;
+  color: #334155;
+  line-height: 1.55;
+}
+
+.notification-action-grid {
+  min-height: 0;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  overflow-y: auto;
+}
+
+.notification-action-grid article {
+  min-height: 118px;
+  display: grid;
+  align-content: space-between;
+  padding: 14px;
+  border: 1px solid #e6edf5;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
+}
+
+.notification-action-grid span,
+.notification-action-grid small {
+  color: #667482;
+}
+
+.notification-action-grid strong {
+  color: #17202a;
+  font-size: 17px;
+}
+
 .calendar-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
@@ -4951,103 +5048,6 @@ body {
   to {
     transform: rotate(360deg);
   }
-}
-
-/* Notifications: same full-screen pane model as social pages. */
-.notification-workspace {
-  min-height: calc(100vh - 128px);
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  gap: 14px;
-  align-items: stretch;
-}
-
-.notification-side-nav {
-  height: calc(100vh - 128px);
-  min-height: 640px;
-  display: grid;
-  gap: 10px;
-  align-content: start;
-  overflow-y: auto;
-  padding: 12px;
-  border: 1px solid #e1e8f0;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.95);
-  box-shadow: 0 22px 60px rgba(15, 23, 42, 0.08);
-}
-
-.notification-content {
-  height: calc(100vh - 128px);
-  min-height: 640px;
-  min-width: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 14px;
-}
-
-.notification-overview-panel {
-  grid-column: 1 / -1;
-}
-
-.notification-feed-panel,
-.notification-assist-panel {
-  min-height: 0;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  overflow: hidden;
-}
-
-.notification-feed-panel {
-  grid-column: 1;
-}
-
-.notification-assist-panel {
-  grid-column: 2;
-}
-
-.notification-content .notification-list {
-  min-height: 0;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
-.notification-body {
-  min-width: 0;
-}
-
-.notification-body p {
-  margin: 8px 0;
-  color: #334155;
-  line-height: 1.55;
-}
-
-.notification-action-grid {
-  min-height: 0;
-  display: grid;
-  gap: 10px;
-  align-content: start;
-  overflow-y: auto;
-}
-
-.notification-action-grid article {
-  min-height: 118px;
-  display: grid;
-  align-content: space-between;
-  padding: 14px;
-  border: 1px solid #e6edf5;
-  border-radius: 8px;
-  background: linear-gradient(180deg, #ffffff, #f8fafc);
-}
-
-.notification-action-grid span,
-.notification-action-grid small {
-  color: #667482;
-}
-
-.notification-action-grid strong {
-  color: #17202a;
-  font-size: 17px;
 }
 
 /* Badges: richer achievement wall with internal scrolling. */
