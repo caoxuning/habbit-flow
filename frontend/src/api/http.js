@@ -29,11 +29,10 @@ http.interceptors.response.use(
   },
   (error) => {
     const message = error.response?.data?.message || error.message || '网络异常'
-    ElMessage.error(message)
     if (error.response?.status === 401 || error.response?.data?.code === 401) {
-      localStorage.removeItem('habitflow_token')
-      localStorage.removeItem('habitflow_profile')
-      window.location.reload()
+      window.dispatchEvent(new CustomEvent('habitflow:auth-expired', { detail: { message } }))
+    } else {
+      ElMessage.error(message)
     }
     return Promise.reject(error)
   }

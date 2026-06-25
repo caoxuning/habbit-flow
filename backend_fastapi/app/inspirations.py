@@ -1,6 +1,8 @@
 """
-HabitFlow 内容推荐系统
-按目标类型分类的精选内容库，包含名人名言、学习方法、好词好句、技巧建议等
+HabitFlow content suggestions.
+
+Suggestions are random UI feedback returned only after a real check-in. They do
+not create or modify database records.
 """
 
 import random
@@ -152,7 +154,7 @@ INSPIRATIONS = {
 
 
 def get_inspiration(goal_type: str) -> dict:
-    """根据目标类型随机返回一条精选内容"""
+    """Return one random suggestion for the given goal type."""
     items = INSPIRATIONS.get(goal_type, INSPIRATIONS["default"])
     item = random.choice(items)
     return {

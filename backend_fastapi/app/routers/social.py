@@ -1,7 +1,7 @@
 from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, or_
+from sqlalchemy import and_, case, func, or_
 from sqlalchemy.orm import Session
 
 from ..common import AppException, ok
@@ -124,6 +124,17 @@ def can_view_post(db: Session, post: CirclePost, current_user_id: int) -> bool:
 def serialize_post(db: Session, post: CirclePost, current_user_id: int):
     circle = db.query(SocialCircle).filter(SocialCircle.id == post.circle_id).first()
     author = db.query(User).filter(User.id == post.user_id).first()
+    check_in = None
+    goal = None
+    if post.check_in_id is not None:
+        row = (
+            db.query(CheckIn, Goal)
+            .join(Goal, CheckIn.goal_id == Goal.id)
+            .filter(CheckIn.id == post.check_in_id)
+            .first()
+        )
+        if row is not None:
+            check_in, goal = row
     like_count = db.query(PostLike).filter(PostLike.post_id == post.id).count()
     comment_count = db.query(PostComment).filter(PostComment.post_id == post.id).count()
     liked = (
@@ -132,7 +143,7 @@ def serialize_post(db: Session, post: CirclePost, current_user_id: int):
         .first()
         is not None
     )
-    return circle_post_dict(post, circle, author, like_count, comment_count, liked)
+    return circle_post_dict(post, circle, author, like_count, comment_count, liked, check_in, goal)
 
 
 def notify_friends_for_checkin(
@@ -356,11 +367,26 @@ def social_leaderboards(
         for index, (user, check_in_count) in enumerate(friend_rows)
     ]
 
-    circle_checkin_count = func.count(CheckIn.id)
+    circle_checkin_count = func.count(func.distinct(case((CircleMember.id.isnot(None), CheckIn.id))))
     circle_rows = (
         db.query(SocialCircle, circle_checkin_count.label("check_in_count"))
-        .outerjoin(CircleMember, CircleMember.circle_id == SocialCircle.id)
-        .outerjoin(CheckIn, CheckIn.user_id == CircleMember.user_id)
+        .outerjoin(
+            CirclePost,
+            and_(
+                CirclePost.circle_id == SocialCircle.id,
+                CirclePost.post_type == "CHECK_IN",
+                CirclePost.check_in_id.isnot(None),
+            ),
+        )
+        .outerjoin(CheckIn, CheckIn.id == CirclePost.check_in_id)
+        .outerjoin(
+            CircleMember,
+            and_(
+                CircleMember.circle_id == SocialCircle.id,
+                CircleMember.user_id == CirclePost.user_id,
+                CheckIn.check_time >= CircleMember.join_time,
+            ),
+        )
         .group_by(
             SocialCircle.id,
             SocialCircle.name,
@@ -619,8 +645,11 @@ def share_check_in(
                 raise AppException("请先加入一个圈子，或选择仅通知好友/仅自己可见")
             circle_id = membership.circle_id
         circle = get_circle(db, circle_id)
-        if get_member(db, circle.id, current_user.id) is None:
+        membership = get_member(db, circle.id, current_user.id)
+        if membership is None:
             raise AppException("加入圈子后才能分享动态")
+        if checkin.check_time < membership.join_time:
+            raise AppException("只能分享加入该圈子之后产生的打卡")
         post = CirclePost(
             circle_id=circle.id,
             user_id=current_user.id,

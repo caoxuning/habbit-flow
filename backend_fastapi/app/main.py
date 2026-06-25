@@ -4,9 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import inspect, text
 
-from .business import seed_badges, seed_circles
 from .common import install_exception_handlers
-from .database import Base, SessionLocal, engine
+from .database import Base, engine
 from .routers import auth, badges, checkins, exports, goals, notifications, social, stats, users
 
 app = FastAPI(title="HabitFlow FastAPI Backend")
@@ -35,12 +34,6 @@ def startup():
     ensure_goal_priority_column()
     ensure_circle_post_share_columns()
     ensure_notification_columns()
-    db = SessionLocal()
-    try:
-        seed_badges(db)
-        seed_circles(db)
-    finally:
-        db.close()
 
 
 def ensure_goal_priority_column():
