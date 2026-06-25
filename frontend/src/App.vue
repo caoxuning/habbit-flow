@@ -577,6 +577,17 @@
                   <p>{{ item.content }}</p>
                   <small>{{ formatDateTime(item.createTime) }}</small>
                 </div>
+                <div class="notification-confirm-actions">
+                  <el-button
+                    v-if="!item.read"
+                    size="small"
+                    type="primary"
+                    @click="markNotificationRead(item)"
+                  >
+                    确认
+                  </el-button>
+                  <el-tag v-else size="small" type="info" effect="plain">已确认</el-tag>
+                </div>
               </article>
               <el-empty v-if="filteredNotifications.length === 0" description="当前分类暂无提醒" />
             </div>
@@ -1537,11 +1548,13 @@ const selectedCalendarDate = ref('')
 let monthlyChart
 let rateChart
 let idleTimer = null
+let notificationTimer = null
 let authParticleFrame = 0
 let authParticleStop = null
 
 const IDLE_TIMEOUT_MS = 60 * 60 * 1000
 const IDLE_CHECK_MS = 60 * 1000
+const UNREAD_REFRESH_MS = 15 * 1000
 const LAST_ACTIVITY_KEY = 'habitflow_last_activity'
 const ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'wheel', 'touchstart']
 
@@ -1790,12 +1803,12 @@ const notificationActionCards = computed(() => [
   {
     kicker: '今日',
     title: todayGoals.value.length > 0 ? `${todayDoneCount.value}/${todayGoals.value.length} 个目标已打卡` : '今天暂无目标',
-    description: todayGoals.value.length > todayDoneCount.value ? '先完成剩余目标，再把提醒标记为已读。' : '今天节奏不错，可以查看成长日志或分享给好友。'
+    description: todayGoals.value.length > todayDoneCount.value ? '先完成剩余目标，再逐条确认提醒。' : '今天节奏不错，可以查看成长日志或分享给好友。'
   },
   {
     kicker: '提醒',
     title: `${notificationUnreadCount.value} 条未读消息`,
-    description: notificationUnreadCount.value > 0 ? '建议先处理未读提醒，避免错过到期目标。' : '提醒已经清空，当前页面保持关注即可。'
+    description: notificationUnreadCount.value > 0 ? '建议逐条确认提醒，避免错过到期目标。' : '当前没有未确认提醒，历史消息仍会保留。'
   },
   {
     kicker: '连续',
@@ -1828,6 +1841,7 @@ const badgePlanCards = computed(() => [
 
 onMounted(() => {
   startSessionWatch()
+  startNotificationWatch()
   if (token.value) {
     loadAll().catch(() => {})
   } else {
@@ -1837,14 +1851,19 @@ onMounted(() => {
 
 onUnmounted(() => {
   stopSessionWatch()
+  stopNotificationWatch()
   stopAuthParticles()
 })
 
 watch(token, async (value) => {
   if (value) {
     stopAuthParticles()
+    startNotificationWatch()
+    refreshNotificationUnreadCount()
     return
   }
+  stopNotificationWatch()
+  notificationUnreadCount.value = 0
   await nextTick()
   startAuthParticles()
 })
@@ -2132,6 +2151,7 @@ async function saveGoal() {
     await goalApi.update(goalForm.id, payload)
   } else {
     await goalApi.create(payload)
+    await refreshNotificationUnreadCount()
   }
   goalDialogVisible.value = false
   ElMessage.success('目标已保存')
@@ -2505,6 +2525,30 @@ function stopSessionWatch() {
   }
 }
 
+function startNotificationWatch() {
+  stopNotificationWatch()
+  if (!token.value) return
+  refreshNotificationUnreadCount()
+  notificationTimer = window.setInterval(refreshNotificationUnreadCount, UNREAD_REFRESH_MS)
+}
+
+function stopNotificationWatch() {
+  if (notificationTimer) {
+    window.clearInterval(notificationTimer)
+    notificationTimer = null
+  }
+}
+
+async function refreshNotificationUnreadCount() {
+  if (!token.value) return
+  try {
+    const data = await notificationApi.unreadCount()
+    notificationUnreadCount.value = data?.unreadCount || 0
+  } catch {
+    // Keep the current count if the lightweight refresh fails briefly.
+  }
+}
+
 function markUserActivity() {
   if (!token.value) return
   localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()))
@@ -2522,6 +2566,7 @@ function checkIdleSession() {
 function handleAuthExpired(event) {
   if (!token.value) return
   clearSession()
+  stopNotificationWatch()
   ElMessage.warning(event.detail?.message || '登录状态已过期，请重新登录')
 }
 
@@ -2545,11 +2590,13 @@ function logout() {
 }
 
 function clearSession() {
+  stopNotificationWatch()
   localStorage.removeItem('habitflow_token')
   localStorage.removeItem('habitflow_profile')
   localStorage.removeItem(LAST_ACTIVITY_KEY)
   token.value = ''
   profile.value = null
+  notificationUnreadCount.value = 0
   activeView.value = 'dashboard'
   mobileNavOpen.value = false
 }
@@ -2621,16 +2668,15 @@ async function enterNotifications() {
   notificationFilters.unreadOnly = false
   notificationMode.value = 'all'
   await loadNotifications()
-  if (notificationUnreadCount.value > 0) {
-    await notificationApi.markAllRead()
-    notifications.value = notifications.value.map((item) => ({ ...item, read: true }))
-    notificationUnreadCount.value = 0
-  }
 }
 
 async function markNotificationRead(item) {
   await notificationApi.markRead(item.id)
-  await loadNotifications()
+  notifications.value = notifications.value.map((row) => (
+    row.id === item.id ? { ...row, read: true } : row
+  ))
+  notificationUnreadCount.value = Math.max(0, notificationUnreadCount.value - 1)
+  await refreshNotificationUnreadCount()
 }
 
 async function markAllNotificationsRead() {
