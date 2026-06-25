@@ -578,14 +578,7 @@
                   <small>{{ formatDateTime(item.createTime) }}</small>
                 </div>
                 <div class="notification-confirm-actions">
-                  <el-button
-                    v-if="!item.read"
-                    size="small"
-                    type="primary"
-                    @click="markNotificationRead(item)"
-                  >
-                    确认
-                  </el-button>
+                  <el-button v-if="!item.read" size="small" type="primary" @click="markNotificationRead(item)">确认</el-button>
                   <el-tag v-else size="small" type="info" effect="plain">已确认</el-tag>
                 </div>
               </article>
