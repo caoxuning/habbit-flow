@@ -11,17 +11,54 @@ body {
 }
 
 .auth-shell {
+  position: relative;
+  isolation: isolate;
   min-height: 100vh;
   display: grid;
   place-items: center;
   padding: 24px;
+  overflow: hidden;
   background:
-    radial-gradient(circle at 18% 22%, rgba(37, 99, 235, 0.22), transparent 30%),
-    radial-gradient(circle at 82% 74%, rgba(15, 159, 143, 0.22), transparent 32%),
-    linear-gradient(135deg, #eef4ff, #f7fbf8 45%, #eef2f7);
+    linear-gradient(125deg, rgba(37, 99, 235, 0.22), transparent 36%),
+    linear-gradient(305deg, rgba(15, 159, 143, 0.24), transparent 38%),
+    radial-gradient(ellipse 74% 56% at 14% 18%, rgba(79, 70, 229, 0.16), transparent 62%),
+    radial-gradient(ellipse 60% 46% at 84% 76%, rgba(15, 159, 143, 0.2), transparent 64%),
+    linear-gradient(135deg, #f5f8ff 0%, #f8fbfa 46%, #edf2f7 100%);
+}
+
+.auth-shell::before,
+.auth-shell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.auth-shell::before {
+  background:
+    radial-gradient(ellipse 60% 44% at 18% 20%, rgba(37, 99, 235, 0.14), transparent 64%),
+    radial-gradient(ellipse 48% 42% at 82% 72%, rgba(20, 184, 166, 0.16), transparent 66%);
+  opacity: 0.9;
+}
+
+.auth-shell::after {
+  display: none;
+}
+
+.auth-particle-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
 
 .auth-stage {
+  position: relative;
+  isolation: isolate;
+  z-index: 2;
   width: min(1180px, 100%);
   display: grid;
   grid-template-columns: minmax(360px, 430px) minmax(0, 1fr);
@@ -29,13 +66,39 @@ body {
   align-items: stretch;
 }
 
+.auth-stage::after {
+  content: "";
+  position: absolute;
+  inset: -76px -96px;
+  z-index: -2;
+  border-radius: 38px;
+  background:
+    linear-gradient(115deg, transparent 0 18%, rgba(37, 99, 235, 0.22) 28%, transparent 43%),
+    linear-gradient(295deg, transparent 0 22%, rgba(20, 184, 166, 0.24) 36%, transparent 52%),
+    linear-gradient(20deg, transparent 0 52%, rgba(99, 102, 241, 0.2) 66%, transparent 78%);
+  filter: blur(18px);
+  opacity: 0.9;
+  animation: auth-ribbon-shift 9s ease-in-out infinite alternate;
+}
+
+@keyframes auth-ribbon-shift {
+  0% {
+    transform: translate3d(-18px, 12px, 0) scale(0.98);
+  }
+  100% {
+    transform: translate3d(18px, -10px, 0) scale(1.02);
+  }
+}
+
 .auth-panel {
   width: 100%;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.76);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.86);
   border-radius: 8px;
   padding: 30px;
-  box-shadow: 0 20px 55px rgba(18, 34, 54, 0.2);
+  box-shadow:
+    0 20px 55px rgba(18, 34, 54, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82);
   backdrop-filter: blur(18px);
 }
 
@@ -71,26 +134,6 @@ h1 {
   min-height: 42px;
 }
 
-.auth-demo-strip {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  align-items: center;
-  margin-top: 16px;
-  padding: 10px 12px;
-  border: 1px solid #dfe6ee;
-  border-radius: 8px;
-  background: #f8fafc;
-}
-
-.auth-demo-strip span {
-  color: #667085;
-}
-
-.auth-demo-strip strong {
-  color: #16202a;
-}
-
 .auth-reveal-panel {
   min-height: 620px;
   position: relative;
@@ -102,7 +145,9 @@ h1 {
     linear-gradient(135deg, rgba(17, 24, 39, 0.96), rgba(30, 64, 175, 0.86) 55%, rgba(15, 118, 110, 0.86)),
     #111827;
   color: #fff;
-  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.18);
+  box-shadow:
+    0 24px 70px rgba(15, 23, 42, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 .auth-reveal-panel::after {
@@ -1895,6 +1940,41 @@ h1 {
   white-space: nowrap;
 }
 
+.post-tags {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 10px 0 4px;
+}
+
+.post-checkin-card {
+  display: grid;
+  gap: 5px;
+  margin: 10px 0 12px;
+  padding: 12px;
+  border: 1px solid rgba(19, 164, 111, 0.24);
+  border-radius: 8px;
+  background: linear-gradient(180deg, #f3fbf7, #ffffff);
+}
+
+.post-checkin-card span,
+.post-checkin-card small {
+  display: block;
+  color: #667482;
+}
+
+.post-checkin-card strong {
+  color: #102a43;
+  font-size: 16px;
+}
+
+.post-checkin-card p {
+  margin: 2px 0 0;
+  color: #334155;
+  line-height: 1.5;
+}
+
 .post-actions {
   display: flex;
   gap: 8px;
@@ -2247,7 +2327,7 @@ h1 {
 .inspiration-cn,
 .inspiration-example,
 .peer-tip-list,
-.inspiration-action {
+.inspiration-actions {
   animation: reward-rise 520ms ease-out both;
 }
 
@@ -2310,8 +2390,12 @@ h1 {
   color: #667482;
 }
 
-.inspiration-action {
+.inspiration-actions {
   margin-top: 18px;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
   animation-delay: 360ms;
 }
 
@@ -4814,4 +4898,525 @@ body {
 .spot-nav-button.active:hover strong,
 .spot-nav-button.active:hover small {
   color: #fff;
+}
+
+/* Session gate: validate local login before entering the app. */
+.session-check-shell {
+  display: grid;
+  place-items: center;
+}
+
+.session-check-card {
+  width: min(420px, calc(100vw - 32px));
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 34px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.16);
+  text-align: center;
+}
+
+.session-check-card h1 {
+  margin: 6px 0 0;
+  color: #111827;
+  font-size: 26px;
+}
+
+.session-check-card p {
+  margin: 0;
+  color: #64748b;
+}
+
+.session-check-icon {
+  margin-top: 8px;
+  color: #2563eb;
+  font-size: 28px;
+  animation: hf-spin 1s linear infinite;
+}
+
+@keyframes hf-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Notifications: same full-screen pane model as social pages. */
+.notification-workspace {
+  min-height: calc(100vh - 128px);
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.notification-side-nav {
+  height: calc(100vh - 128px);
+  min-height: 640px;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  overflow-y: auto;
+  padding: 12px;
+  border: 1px solid #e1e8f0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 22px 60px rgba(15, 23, 42, 0.08);
+}
+
+.notification-content {
+  height: calc(100vh - 128px);
+  min-height: 640px;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 14px;
+}
+
+.notification-overview-panel {
+  grid-column: 1 / -1;
+}
+
+.notification-feed-panel,
+.notification-assist-panel {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.notification-feed-panel {
+  grid-column: 1;
+}
+
+.notification-assist-panel {
+  grid-column: 2;
+}
+
+.notification-content .notification-list {
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.notification-body {
+  min-width: 0;
+}
+
+.notification-body p {
+  margin: 8px 0;
+  color: #334155;
+  line-height: 1.55;
+}
+
+.notification-action-grid {
+  min-height: 0;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  overflow-y: auto;
+}
+
+.notification-action-grid article {
+  min-height: 118px;
+  display: grid;
+  align-content: space-between;
+  padding: 14px;
+  border: 1px solid #e6edf5;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
+}
+
+.notification-action-grid span,
+.notification-action-grid small {
+  color: #667482;
+}
+
+.notification-action-grid strong {
+  color: #17202a;
+  font-size: 17px;
+}
+
+/* Badges: richer achievement wall with internal scrolling. */
+.badge-workspace {
+  min-height: calc(100vh - 128px);
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.badge-side-panel {
+  position: sticky;
+  top: 92px;
+  height: calc(100vh - 128px);
+  min-height: 640px;
+  display: grid;
+  gap: 14px;
+  align-content: start;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 70% 8%, rgba(245, 159, 0, 0.18), transparent 30%),
+    linear-gradient(180deg, #ffffff, #f8fafc);
+}
+
+.badge-hero-medal {
+  width: 96px;
+  height: 96px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #f59f00, #ffd43b);
+  color: #fff;
+  font-size: 46px;
+  box-shadow: 0 18px 40px rgba(245, 159, 0, 0.24);
+}
+
+.badge-side-panel > span {
+  color: #4f9d8f;
+  font-weight: 800;
+}
+
+.badge-side-panel h3 {
+  margin: 0;
+  color: #111827;
+  font-size: 28px;
+}
+
+.badge-side-panel p {
+  margin: 0;
+  color: #667482;
+  line-height: 1.7;
+}
+
+.badge-side-stats {
+  display: grid;
+  gap: 10px;
+}
+
+.badge-side-stats article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 62px;
+  padding: 12px;
+  border: 1px solid #e6edf5;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.badge-side-stats strong {
+  color: #17202a;
+  font-size: 22px;
+}
+
+.badge-side-stats span {
+  color: #667482;
+}
+
+.badge-content {
+  height: calc(100vh - 128px);
+  min-height: 640px;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 14px;
+}
+
+.badge-showcase-panel,
+.badge-plan-panel {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.badge-grid-rich {
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.badge-card-rich {
+  min-height: 190px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  align-content: start;
+  border: 1px solid #e6edf5;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ffffff, #fbfcfe);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}
+
+.badge-card-rich:hover {
+  transform: translateY(-2px);
+  border-color: rgba(245, 159, 0, 0.36);
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.08);
+}
+
+.badge-card-rich.locked {
+  background: #f8fafc;
+  opacity: 0.86;
+}
+
+.badge-card-rich.locked .badge-icon {
+  background: #edf2f7;
+  color: #64748b;
+}
+
+.badge-plan-list {
+  min-height: 0;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  overflow-y: auto;
+}
+
+.badge-plan-list article {
+  min-height: 118px;
+  display: grid;
+  align-content: space-between;
+  padding: 14px;
+  border: 1px solid #e6edf5;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #fff, #f8fafc);
+}
+
+.badge-plan-list span,
+.badge-plan-list small {
+  color: #667482;
+}
+
+.badge-plan-list strong {
+  color: #17202a;
+  font-size: 17px;
+}
+
+@media (max-width: 1120px) {
+  .notification-workspace,
+  .badge-workspace {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .notification-side-nav,
+  .badge-side-panel,
+  .notification-content,
+  .badge-content {
+    position: static;
+    height: auto;
+    min-height: 0;
+  }
+
+  .notification-side-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .notification-content,
+  .badge-content {
+    grid-template-columns: 1fr;
+  }
+
+  .notification-feed-panel,
+  .notification-assist-panel {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .notification-side-nav {
+    grid-template-columns: 1fr;
+  }
+
+  .notification-item {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .notification-row-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+
+  .badge-card-rich {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Notifications compact correction: outer workspace is full, inner cards keep readable fixed heights. */
+.notification-workspace {
+  height: calc(100vh - 128px);
+  min-height: 620px;
+  align-items: stretch;
+}
+
+.notification-side-nav {
+  grid-auto-rows: min-content;
+  align-content: start;
+}
+
+.notification-side-nav .social-side-link {
+  min-height: 86px;
+  align-content: center;
+}
+
+.notification-content {
+  align-content: start;
+  grid-template-rows: auto auto;
+}
+
+.notification-overview-panel {
+  align-self: start;
+}
+
+.notification-overview-panel .notification-summary {
+  margin-bottom: 0;
+}
+
+.notification-overview-panel .notification-summary article {
+  min-height: 86px;
+  align-content: center;
+}
+
+.notification-feed-panel,
+.notification-assist-panel {
+  height: clamp(360px, calc(100vh - 360px), 520px);
+  min-height: 360px;
+  align-self: start;
+}
+
+.notification-content .notification-list {
+  align-content: start;
+  gap: 10px;
+}
+
+.notification-item {
+  grid-template-columns: auto minmax(0, 1fr);
+  min-height: 112px;
+  max-height: 112px;
+  align-items: center;
+  overflow: hidden;
+}
+
+.notification-title-row {
+  min-width: 0;
+}
+
+.notification-title-row strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notification-body p {
+  display: -webkit-box;
+  min-height: 0;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.notification-action-grid {
+  align-content: start;
+}
+
+.notification-action-grid article {
+  min-height: 112px;
+  max-height: 112px;
+}
+
+@media (max-width: 1120px) {
+  .notification-workspace,
+  .notification-content,
+  .notification-side-nav {
+    height: auto;
+    min-height: 0;
+  }
+
+  .notification-feed-panel,
+  .notification-assist-panel {
+    height: auto;
+    min-height: 320px;
+  }
+}
+
+/* Calendar workspace: make the calendar view fill the available screen height. */
+.calendar-layout {
+  height: calc(100vh - 128px);
+  min-height: 640px;
+  align-items: stretch;
+}
+
+.calendar-panel,
+.calendar-side {
+  min-height: 0;
+  height: 100%;
+}
+
+.calendar-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.calendar-panel .el-calendar {
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.calendar-panel .el-calendar__body {
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.calendar-panel .el-calendar-table {
+  height: 100%;
+  table-layout: fixed;
+}
+
+.calendar-panel .el-calendar-table tr {
+  height: 16.666%;
+}
+
+.calendar-panel .el-calendar-table td {
+  height: 16.666%;
+}
+
+.calendar-panel .el-calendar-day {
+  height: 100%;
+  min-height: 112px;
+}
+
+.calendar-cell {
+  min-height: 0;
+  height: 100%;
+}
+
+.calendar-side {
+  display: grid;
+  grid-auto-rows: min-content;
+  align-content: start;
+  overflow-y: auto;
+}
+
+@media (max-width: 980px) {
+  .calendar-layout,
+  .calendar-panel,
+  .calendar-side {
+    height: auto;
+    min-height: 0;
+  }
+
+  .calendar-panel .el-calendar,
+  .calendar-panel .el-calendar__body,
+  .calendar-panel .el-calendar-table {
+    height: auto;
+  }
 }

@@ -193,13 +193,23 @@ def circle_member_dict(member, user):
     }
 
 
-def circle_post_dict(post, circle, author, like_count: int = 0, comment_count: int = 0, liked: bool = False):
+def circle_post_dict(
+    post,
+    circle,
+    author,
+    like_count: int = 0,
+    comment_count: int = 0,
+    liked: bool = False,
+    check_in=None,
+    goal=None,
+):
     return {
         "id": post.id,
         "circleId": circle.id,
         "circleName": circle.name,
         "author": user_summary(author),
         "checkInId": post.check_in_id,
+        "checkIn": check_in_dict(check_in, goal) if check_in is not None else None,
         "visibility": post.visibility,
         "postType": post.post_type,
         "content": post.content,
