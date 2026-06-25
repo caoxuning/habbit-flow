@@ -5344,11 +5344,18 @@ body {
   }
 }
 
-/* Calendar workspace: make the calendar view fill the available screen height. */
+/* Calendar workspace: adaptive viewport template for desktop and laptop screens. */
 .calendar-layout {
-  height: calc(100vh - 128px);
-  min-height: 640px;
+  --calendar-layout-height: clamp(540px, calc(100dvh - 128px), 820px);
+  --calendar-side-width: clamp(248px, 17vw, 330px);
+  --calendar-cell-padding: clamp(4px, 0.55vw, 8px);
+  --calendar-cell-gap: clamp(3px, 0.45vw, 6px);
+  --calendar-task-height: clamp(21px, 3.1dvh, 28px);
+  height: var(--calendar-layout-height);
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr) var(--calendar-side-width);
   align-items: stretch;
+  overflow: hidden;
 }
 
 .calendar-panel,
@@ -5363,6 +5370,24 @@ body {
   overflow: hidden;
 }
 
+.calendar-panel .calendar-head {
+  margin-bottom: clamp(8px, 1.2dvh, 14px);
+}
+
+.calendar-panel .calendar-head h3 {
+  font-size: clamp(16px, 1.2vw, 18px);
+}
+
+.calendar-panel .calendar-head p {
+  font-size: clamp(12px, 0.86vw, 14px);
+  line-height: 1.45;
+}
+
+.calendar-panel .priority-legend {
+  gap: clamp(6px, 0.8vw, 12px);
+  font-size: clamp(11px, 0.78vw, 13px);
+}
+
 .calendar-panel .el-calendar {
   min-height: 0;
   height: 100%;
@@ -5374,6 +5399,11 @@ body {
   min-height: 0;
   height: 100%;
   overflow: hidden;
+}
+
+.calendar-panel .el-calendar__header {
+  min-height: 0;
+  padding: clamp(8px, 1.1dvh, 12px) 0;
 }
 
 .calendar-panel .el-calendar-table {
@@ -5391,12 +5421,36 @@ body {
 
 .calendar-panel .el-calendar-day {
   height: 100%;
-  min-height: 112px;
+  min-height: 0;
+  padding: var(--calendar-cell-padding);
 }
 
 .calendar-cell {
   min-height: 0;
   height: 100%;
+  padding: 0;
+  gap: var(--calendar-cell-gap);
+}
+
+.calendar-day {
+  font-size: clamp(12px, 0.85vw, 14px);
+  line-height: 1.1;
+}
+
+.calendar-task-list {
+  gap: clamp(3px, 0.36vw, 5px);
+}
+
+.calendar-task {
+  min-height: var(--calendar-task-height);
+  padding: clamp(3px, 0.45vw, 5px) clamp(5px, 0.55vw, 7px);
+  gap: clamp(4px, 0.5vw, 6px);
+  font-size: clamp(11px, 0.8vw, 13px);
+}
+
+.calendar-task small,
+.calendar-overflow-hint {
+  font-size: clamp(10px, 0.72vw, 12px);
 }
 
 .calendar-side {
@@ -5404,6 +5458,17 @@ body {
   grid-auto-rows: min-content;
   align-content: start;
   overflow-y: auto;
+  padding: clamp(14px, 1.35vw, 18px);
+}
+
+.calendar-side .panel-head {
+  margin-bottom: clamp(8px, 1.1dvh, 14px);
+}
+
+.calendar-side .today-task {
+  min-height: clamp(58px, 8dvh, 76px);
+  padding: clamp(9px, 0.95vw, 12px);
+  margin-bottom: clamp(8px, 1dvh, 10px);
 }
 
 @media (max-width: 980px) {

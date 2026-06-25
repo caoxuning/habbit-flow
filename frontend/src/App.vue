@@ -2619,10 +2619,12 @@ async function loadNotifications() {
 
 async function enterNotifications() {
   notificationFilters.unreadOnly = false
+  notificationMode.value = 'all'
   await loadNotifications()
   if (notificationUnreadCount.value > 0) {
     await notificationApi.markAllRead()
-    await loadNotifications()
+    notifications.value = notifications.value.map((item) => ({ ...item, read: true }))
+    notificationUnreadCount.value = 0
   }
 }
 
