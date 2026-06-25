@@ -751,7 +751,8 @@ h1 {
 
 .notification-actions,
 .notification-title-row,
-.notification-row-actions {
+.notification-row-actions,
+.notification-confirm-actions {
   display: flex;
   gap: 8px;
   align-items: center;
@@ -760,6 +761,15 @@ h1 {
 
 .notification-actions {
   justify-content: flex-end;
+}
+
+.notification-confirm-actions {
+  justify-content: flex-end;
+  min-width: 72px;
+}
+
+.notification-confirm-actions .el-button {
+  min-width: 64px;
 }
 
 .notification-summary {
@@ -5241,6 +5251,11 @@ body {
     justify-content: flex-end;
   }
 
+  .notification-confirm-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+
   .badge-card-rich {
     grid-template-columns: 1fr;
   }
@@ -5294,7 +5309,7 @@ body {
 }
 
 .notification-item {
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   min-height: 112px;
   max-height: 112px;
   align-items: center;

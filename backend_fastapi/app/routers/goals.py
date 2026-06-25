@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from ..business import goal_progress
 from ..common import AppException, ok
 from ..deps import get_current_user, get_db
-from ..models import Goal, User
+from ..models import Goal, Notification, User
 from ..schemas import GoalRequest, goal_dict
 
 router = APIRouter(prefix="/api/goals", tags=["目标"])
@@ -59,6 +59,15 @@ def create_goal(
     goal.create_time = datetime.now()
     goal.update_time = datetime.now()
     db.add(goal)
+    db.flush()
+    db.add(Notification(
+        user_id=current_user.id,
+        type="DAILY_CHECK_IN",
+        title="新目标已创建",
+        content=f"你已创建目标「{goal.name}」，记得按照计划完成每日打卡。",
+        is_read=False,
+        create_time=datetime.now(),
+    ))
     db.commit()
     db.refresh(goal)
     return ok(goal_dict(goal))
